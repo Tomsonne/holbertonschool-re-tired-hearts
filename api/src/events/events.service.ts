@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { AppException } from '../common/app.exception';
 import { Interest } from '../interests/interest.entity';
 import { ModerationAction, ModerationActionType } from '../moderation/moderation-action.entity';
@@ -7,6 +7,7 @@ import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { EventRegistration, RegistrationStatus } from './event-registration.entity';
 import { Event, EventStatus } from './event.entity';
+import { EventFiltersDto } from './event-filters.dto';
 import { EventInputDto, UpdateEventDto } from './event-input.dto';
 
 @Injectable()
@@ -108,6 +109,81 @@ export class EventsService {
       throw new AppException(HttpStatus.NOT_FOUND, 'EVENT_NOT_FOUND', "Cette sortie n'est pas disponible.");
     }
     return event;
+  }
+
+  async listPublished(actorId: string, filters: EventFiltersDto) {
+    await this.actor(this.db.manager, actorId);
+    const page = filters.page ?? 1;
+    const pageSize = 12;
+    const requestedFrom = filters.from ? new Date(filters.from) : new Date();
+    const from = requestedFrom > new Date() ? requestedFrom : new Date();
+    const query = this.db.manager.createQueryBuilder(Event, 'event')
+      .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.starts_at > :from', { from });
+    if (filters.interestId !== undefined) {
+      query.andWhere('event.interest_id = :interestId', { interestId: filters.interestId });
+    }
+    if (filters.cityName) {
+      query.andWhere('LOWER(event.city_name) = LOWER(:cityName)', { cityName: filters.cityName });
+    }
+    if (filters.cityCode) {
+      query.andWhere('event.city_code = :cityCode', { cityCode: filters.cityCode });
+    }
+    if (filters.departmentCode) {
+      query.andWhere('event.department_code = :departmentCode', { departmentCode: filters.departmentCode });
+    }
+    const [events, total] = await query.orderBy('event.starts_at', 'ASC')
+      .addOrderBy('event.id', 'ASC').skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
+    if (events.length === 0) return { items: [], page, pageSize, total };
+
+    const eventIds = events.map((event) => event.id);
+    const organizerIds = [...new Set(events.map((event) => event.organizerId))];
+    const interestIds = [...new Set(events.map((event) => event.interestId))];
+    const [interests, organizers, profiles, registrations, counts] = await Promise.all([
+      this.db.manager.findBy(Interest, { id: In(interestIds) }),
+      this.db.manager.findBy(User, { id: In(organizerIds) }),
+      this.db.manager.findBy(Profile, { userId: In(organizerIds) }),
+      this.db.manager.findBy(EventRegistration, { eventId: In(eventIds), userId: actorId }),
+      this.db.manager.createQueryBuilder(EventRegistration, 'registration')
+        .select('registration.event_id', 'eventId')
+        .addSelect('COUNT(*)', 'registeredCount')
+        .where('registration.event_id IN (:...eventIds)', { eventIds })
+        .andWhere('registration.status = :status', { status: RegistrationStatus.Registered })
+        .groupBy('registration.event_id')
+        .getRawMany<{ eventId: string; registeredCount: string }>(),
+    ]);
+    const interestById = new Map(interests.map((interest) => [interest.id, interest]));
+    const organizerById = new Map(organizers.map((organizer) => [organizer.id, organizer]));
+    const profileById = new Map(profiles.map((profile) => [profile.userId, profile]));
+    const registrationByEventId = new Map(registrations.map((registration) => [registration.eventId, registration]));
+    const countByEventId = new Map(counts.map((row) => [row.eventId, Number(row.registeredCount)]));
+
+    const items = events.map((event) => {
+      const interest = interestById.get(event.interestId)!;
+      const organizer = organizerById.get(event.organizerId)!;
+      const organizerProfile = profileById.get(event.organizerId);
+      const registeredCount = countByEventId.get(event.id) ?? 0;
+      return {
+        id: event.id,
+        title: event.title,
+        interest: { id: interest.id, slug: interest.slug, label: interest.label },
+        startsAt: event.startsAt.toISOString(),
+        endsAt: event.endsAt.toISOString(),
+        location: { cityName: event.cityName, departmentCode: event.departmentCode },
+        status: event.status,
+        isPast: false,
+        capacity: event.capacity,
+        availablePlaces: Math.max(0, event.capacity - registeredCount),
+        organizer: {
+          userId: organizer.id,
+          displayName: organizer.status === AccountStatus.Active && organizerProfile?.status === ProfileStatus.Approved
+            ? organizerProfile.displayName : 'Membre indisponible',
+          isOrganizer: true,
+        },
+        myRegistration: registrationByEventId.get(event.id)?.status ?? null,
+      };
+    });
+    return { items, page, pageSize, total };
   }
 
   // Projection explicite : aucune adresse privée ni code postal dans une réponse générale.

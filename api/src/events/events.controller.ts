@@ -1,11 +1,12 @@
 import {
   Body, CanActivate, Controller, Delete, ExecutionContext, Get, HttpCode, HttpStatus,
-  Injectable, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards,
+  Injectable, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { IsString, Length } from 'class-validator';
 import { Request } from 'express';
 import { AppException } from '../common/app.exception';
 import { EventInputDto, UpdateEventDto } from './event-input.dto';
+import { EventFiltersDto } from './event-filters.dto';
 import { EventsService } from './events.service';
 
 type AuthenticatedRequest = Request & { user?: { id: string } };
@@ -36,6 +37,11 @@ export class EventsController {
 
   private userId(request: AuthenticatedRequest): string {
     return request.user!.id;
+  }
+
+  @Get()
+  list(@Req() request: AuthenticatedRequest, @Query() filters: EventFiltersDto) {
+    return this.events.listPublished(this.userId(request), filters);
   }
 
   @Post()
