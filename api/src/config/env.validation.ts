@@ -33,6 +33,10 @@ class EnvironmentVariables {
   @IsOptional()
   @IsIn(['true', 'false'])
   SWAGGER_ENABLED: string = 'true';
+
+  @IsString()
+  @MinLength(32)
+  JWT_SECRET: string;
 }
 
 // Échoue dès le démarrage en listant les variables manquantes ou invalides,

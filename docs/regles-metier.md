@@ -41,12 +41,11 @@ Deux statuts indépendants : `users.status` (`active` par défaut, ou `suspended
 | actif + `pending` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | actif + `approved` | ✅ | ✅ | ✅ | ✅ | ✅ | organisateur | ✅ | ✅ (voir §7) |
 | actif + `blocked` | ✅ | ✅ | ❌ (lecture seule) | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `suspended` | ❌ `403 ACCOUNT_SUSPENDED` | ✅ via session existante | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `suspended` | ❌ `403 ACCOUNT_SUSPENDED` | ✅ compte et déconnexion via session existante | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-- **R-STATUS-1** Un compte suspendu dont la session est encore valide ne peut appeler que
-  `GET /api/me` (pour comprendre la restriction) et `POST /api/auth/logout`. Toute autre route
-  protégée répond `403 ACCOUNT_SUSPENDED`. La suspension incrémente aussi `session_version`, ce qui
-  invalide les jetons déjà émis.
+- **R-STATUS-1** La suspension incrémente `session_version`. Les sessions déjà ouvertes restent
+  utilisables uniquement pour `GET /api/me` et `POST /api/auth/logout`; toute autre route protégée
+  est refusée. Une nouvelle connexion au compte suspendu répond `403 ACCOUNT_SUSPENDED`.
 - **R-STATUS-2** Un profil bloqué est invisible partout (découverte, fiche profil, liste de
   participants, conversations des autres affichent « Membre indisponible »). Le membre garde l'accès
   à son compte et peut se déconnecter.
@@ -209,9 +208,11 @@ stateDiagram-v2
   (`Secure` en production), valable **2 heures**. Le jeton ne contient que l'identifiant du compte et
   `session_version`.
 - **R-AUTH-3** À chaque requête protégée, la garde relit le compte dans PostgreSQL et rejette le jeton
-  si le compte n'existe plus ou si `session_version` a changé (`401 SESSION_EXPIRED`).
+  si le compte n'existe plus ou si `session_version` a changé (`401 SESSION_EXPIRED`). Exception :
+  un compte suspendu conserve l'accès de session uniquement pour `GET /api/me` et
+  `POST /api/auth/logout`; toutes ses autres routes restent interdites.
 - **R-AUTH-4** La déconnexion efface le cookie. « Se déconnecter partout » et la suspension
-  incrémentent `session_version`.
+  incrémentent `session_version`; après réactivation, les anciens jetons sont rejetés.
 - **R-AUTH-5** Un e-mail inconnu et un mot de passe faux produisent le **même** `401
   INVALID_CREDENTIALS`. La connexion est limitée à 5 tentatives par quart d'heure.
 - **R-AUTH-6** Une session expirée renvoie vers la page de connexion avec le message « Votre session a

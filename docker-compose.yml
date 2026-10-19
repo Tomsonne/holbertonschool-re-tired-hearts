@@ -32,6 +32,7 @@ services:
       DATABASE_NAME: ${DATABASE_NAME:-re_tired_hearts}
       DATABASE_LOGGING: ${DATABASE_LOGGING:-false}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      JWT_SECRET: ${JWT_SECRET:?Copiez .env.example en .env et renseignez JWT_SECRET}
     ports:
       - "${API_HOST_PORT:-3000}:3000"
     depends_on:

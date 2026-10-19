@@ -1,4 +1,5 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
@@ -8,6 +9,7 @@ import { validationExceptionFactory } from './common/validation';
 // pour que les tests passent par la même chaîne que la production.
 export function configureApp(app: INestApplication, options: { swagger: boolean }): void {
   app.setGlobalPrefix('api');
+  app.use(cookieParser());
   app.use(helmet());
   app.useGlobalPipes(
     new ValidationPipe({

@@ -5,6 +5,7 @@ import { validateEnv } from './config/env.validation';
 import { buildDataSourceOptions } from './database/typeorm.config';
 import { HealthModule } from './health/health.module';
 import { InterestsModule } from './interests/interests.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { InterestsModule } from './interests/interests.module';
     TypeOrmModule.forRootAsync({ useFactory: () => buildDataSourceOptions(process.env) }),
     HealthModule,
     InterestsModule,
+    AuthModule,
   ],
 })
 export class AppModule {}
