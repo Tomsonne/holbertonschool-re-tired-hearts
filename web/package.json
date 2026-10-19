@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lock:refresh": "docker run --rm -v \"$PWD\":/app -w /app node:22-alpine npm install --package-lock-only --no-audit --no-fund"
   },
   "dependencies": {
     "vue": "^3.5.22",

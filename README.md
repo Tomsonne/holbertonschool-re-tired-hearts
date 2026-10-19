@@ -94,6 +94,23 @@ docker compose down -v && docker compose up --build
 Les comptes et données de démonstration ne sont pas des migrations : ils viendront d'un script de
 seed (tâche 5).
 
+## Dépendances et fichiers de lock
+
+Les images Docker utilisent `npm ci`, qui exige un `package-lock.json` exactement synchronisé avec
+le `package.json`. Or deux versions majeures de npm ne résolvent pas toujours l'arborescence de la
+même façon : un `npm install` lancé avec un npm plus récent que celui de l'image `node:22-alpine`
+(npm 10) peut retirer des entrées du lock et faire échouer la construction de l'image.
+
+Après avoir ajouté ou mis à jour une dépendance, régénérez donc le lock avec le npm de l'image :
+
+```bash
+cd api && npm run lock:refresh    # idem dans web/
+```
+
+Si `docker compose build` échoue sur `npm ci can only install packages when your package.json and
+package-lock.json are in sync`, c'est exactement ce cas : lancez la commande ci-dessus et commitez le
+lock régénéré.
+
 ## Tests
 
 ```bash
