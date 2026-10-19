@@ -8,6 +8,7 @@ import { AppException } from '../common/app.exception';
 import { EventInputDto, UpdateEventDto } from './event-input.dto';
 import { EventFiltersDto } from './event-filters.dto';
 import { EventsService } from './events.service';
+import { RegistrationsService } from './registrations.service';
 
 type AuthenticatedRequest = Request & { user?: { id: string } };
 
@@ -33,7 +34,7 @@ class CancelEventDto {
 @Controller('events')
 @UseGuards(EventSessionGuard)
 export class EventsController {
-  constructor(private readonly events: EventsService) {}
+  constructor(private readonly events: EventsService, private readonly registrations: RegistrationsService) {}
 
   private userId(request: AuthenticatedRequest): string {
     return request.user!.id;
@@ -86,5 +87,16 @@ export class EventsController {
   @HttpCode(204)
   async remove(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.events.remove(this.userId(request), id);
+  }
+
+  @Post(':id/registration')
+  register(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.registrations.register(this.userId(request), id);
+  }
+
+  @Delete(':id/registration')
+  @HttpCode(200)
+  withdraw(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.registrations.withdraw(this.userId(request), id);
   }
 }
