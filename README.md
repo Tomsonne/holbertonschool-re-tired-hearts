@@ -115,6 +115,8 @@ lock régénéré.
 
 ```bash
 cd api && npm test               # tests unitaires Jest
+docker compose up -d db           # requis pour les tests d'intégration PostgreSQL
+cd api && npm run test:integration # tests des règles d'événement sur re_tired_hearts_test
 cd web && npm test               # tests de composants Vitest
 ```
 
