@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Length,
@@ -79,6 +80,7 @@ export class ProfileInputDto {
 
   @ApiPropertyOptional({ type: LocationInputDto, nullable: true })
   @IsOptional()
+  @IsObject()
   @ValidateNested()
   @Type(() => LocationInputDto)
   location?: LocationInputDto | null;

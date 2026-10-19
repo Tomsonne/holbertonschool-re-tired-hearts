@@ -85,6 +85,9 @@ describe('Issue #5 — consultation et édition de son propre profil', () => {
       ['centres d’intérêt en double', { interestIds: [1, 1] }],
       ['code postal invalide', { location: { ...validInput.location, postalCode: '6910' } }],
       ['discoverable absent', { discoverable: undefined }],
+      ['location en tableau', { location: [] }],
+      ['location en chaîne', { location: 'Lyon' }],
+      ['location en nombre', { location: 69 }],
     ])('refuse : %s', async (_label, patch) => {
       const error = await pipe.transform({ ...validInput, ...patch }, metadata).catch((e) => e);
       expect(error).toBeInstanceOf(AppException);
