@@ -3,7 +3,9 @@ import { PartialType } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsDateString,
+  IsDefined,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Length,
@@ -58,6 +60,8 @@ export class EventInputDto {
   @IsDateString()
   endsAt: string;
 
+  @IsDefined()
+  @IsObject()
   @ValidateNested()
   @Type(() => EventLocationDto)
   location: EventLocationDto;

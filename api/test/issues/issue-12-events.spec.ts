@@ -8,7 +8,7 @@ import { Profile, ProfileStatus } from '../../src/profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../../src/users/user.entity';
 import { EventRegistration } from '../../src/events/event-registration.entity';
 import { Event, EventStatus } from '../../src/events/event.entity';
-import { EventInputDto } from '../../src/events/event-input.dto';
+import { EventInputDto, UpdateEventDto } from '../../src/events/event-input.dto';
 import { EventsController } from '../../src/events/events.controller';
 import { EventsService } from '../../src/events/events.service';
 
@@ -67,6 +67,20 @@ describe('Issue #12 — création et cycle de vie des événements', () => {
     await expect(pipe.transform({ ...input(), organizerId: 'intrus' }, metadata)).rejects.toMatchObject({ status: 400 });
     await expect(pipe.transform({ ...input(), location: { ...input().location, postalCode: '69' } }, metadata))
       .rejects.toMatchObject({ status: 400 });
+  });
+
+  it('exige un objet location à la création et accepte son absence à la modification', async () => {
+    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true,
+      exceptionFactory: validationExceptionFactory });
+    const createMetadata: ArgumentMetadata = { type: 'body', metatype: EventInputDto };
+    const updateMetadata: ArgumentMetadata = { type: 'body', metatype: UpdateEventDto };
+    const { location: _location, ...withoutLocation } = input();
+
+    await expect(pipe.transform(withoutLocation, createMetadata)).rejects.toMatchObject({ status: 400 });
+    await expect(pipe.transform({ ...input(), location: [] }, createMetadata)).rejects.toMatchObject({ status: 400 });
+    await expect(pipe.transform({ location: [] }, updateMetadata)).rejects.toMatchObject({ status: 400 });
+    await expect(pipe.transform({ title: 'Promenade modifiée' }, updateMetadata))
+      .resolves.toBeInstanceOf(UpdateEventDto);
   });
 
   it('réserve les routes d’écriture aux organisateurs', () => {
