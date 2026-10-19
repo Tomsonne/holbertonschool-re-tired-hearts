@@ -25,7 +25,7 @@ externe : l'application Vue ne reçoit jamais de secret.
 | Validation | DTO `class-validator` + `ValidationPipe` global (`whitelist`, `forbidNonWhitelisted`) | Rejette les champs inconnus comme `role` ou `status` |
 | Documentation API | `@nestjs/swagger` sur `/api/docs` + [contrats-api.md](contrats-api.md) | Contrat vivant des routes faites, contrat écrit pour tout le MVP |
 | Mots de passe | Argon2id | Recommandation OWASP |
-| Sessions | JWT dans un cookie httpOnly, compte relu à chaque requête | Simple et explicable (règles métier §9) |
+| Sessions | JWT dans `rth_session` (cookie httpOnly, SameSite=Strict, Secure en production), durée 2 h ; compte et `session_version` relus à chaque requête | Déconnexion locale par effacement du cookie ; suspension et toute révocation globale par incrément de version (règles métier §9) |
 | En-têtes de sécurité | `helmet` | CSP, `X-Content-Type-Options`, etc. |
 | Limitation de débit | `@nestjs/throttler` | Connexion, inscription, envoi de messages |
 | Front | Vue 3.5 (`<script setup>`), Vue Router 4, Vite 7 | Pile imposée, compilation simple |
@@ -72,11 +72,16 @@ membres partagent une inscription).
 **Autorisation réutilisable** (mise en place en tâche 1) :
 
 - `JwtAuthGuard` global : authentifie le cookie et relit le compte ; `@Public()` l'ignore.
-- `@RequireAccess('active' | 'approved')` : contrôle des statuts de compte et de profil.
+- `@RequireAccess('session' | 'active' | 'approved' | 'organizer' | 'moderator')` : contrôle dans cet ordre des statuts de compte, du profil puis du rôle.
 - `@Roles('organizer' | 'moderator')` : contrôle du rôle.
 - `@CurrentUser()` : injecte le compte authentifié ; aucun service ne fait confiance à un
   identifiant venant du corps de la requête pour savoir « qui je suis ».
 - La propriété d'une ressource est vérifiée dans le service, car elle demande de la charger.
+- Les jetons expirent après 2 h sans renouvellement automatique. La déconnexion efface le cookie
+  `rth_session` (`Path=/api`) ; une suspension incrémente `session_version`. Les anciennes sessions
+  restent limitées à `/api/me` et `/api/auth/logout`; après réactivation, elles sont rejetées.
+- Le contrat MVP expose la déconnexion de la session courante ; aucune route de déconnexion globale
+  n'est définie. Une future opération de révocation globale devra incrémenter `session_version`.
 
 ## Parcours d'une fonctionnalité dans la pile
 
