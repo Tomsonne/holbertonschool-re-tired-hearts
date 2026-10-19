@@ -2,18 +2,19 @@
 
 ## 1. Équipe
 
-> À compléter le premier jour. Chaque membre doit pouvoir expliquer **toute** l'architecture à l'oral,
-> pas seulement sa partie.
+> Chaque membre doit pouvoir expliquer **toute** l'architecture à l'oral, pas seulement sa partie.
 
 | Membre | GitHub | Domaine principal | Disponibilité |
 |---|---|---|---|
-| Étudiant A — _nom_ | `@pseudo` | Comptes, profils, modération (`api/src/users`, `profiles`, `moderation`) | Lun–Ven 9h–18h |
-| Étudiant B — _nom_ | `@pseudo` | Événements, inscriptions, messagerie, API externe (`api/src/events`, `messaging`, `geo`) | Lun–Ven 9h–18h |
-| Étudiant C — _nom_ | `@pseudo` | Interface Vue, accessibilité, Docker (`web/`) | Lun–Ven 9h–18h |
+| **A — Jason** | [`@ToujoursPareil8`](https://github.com/ToujoursPareil8) | Comptes, profils, modération (`api/src/users`, `profiles`, `moderation`) | Lun–Ven 9h–18h |
+| **B — Thomas** | [`@Tomsonne`](https://github.com/Tomsonne) | Événements, inscriptions, messagerie, API externe (`api/src/events`, `messaging`, `geo`) | Lun–Ven 9h–18h |
+| **C — Benjamin** | [`@benji3106`](https://github.com/benji3106) | Interface Vue, accessibilité, Docker (`web/`) | Lun–Ven 9h–18h |
 
-**À deux :** l'étudiant A prend comptes + profils + modération + Docker, l'étudiant B prend
-événements + inscriptions + messagerie. Chacun livre sa fonctionnalité **de bout en bout**
-(migration → route → écran Vue → test).
+Chacun livre sa fonctionnalité **de bout en bout** : migration → route → écran Vue → test.
+
+La répartition mission par mission est dans [backlog.md](backlog.md) ; les issues GitHub
+correspondantes sont déjà assignées. Les missions #1, #28, #32, #33 et #34 sont portées par
+l'équipe entière.
 
 ### Règles de travail
 
