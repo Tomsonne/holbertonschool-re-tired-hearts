@@ -7,6 +7,7 @@ import { User } from '../users/user.entity';
 import { EventInputDto, UpdateEventDto } from './event-input.dto';
 import { EventFiltersDto } from './event-filters.dto';
 import { EventsService } from './events.service';
+import { RegistrationsService } from './registrations.service';
 
 class CancelEventDto {
   @IsString()
@@ -16,7 +17,7 @@ class CancelEventDto {
 
 @Controller('events')
 export class EventsController {
-  constructor(private readonly events: EventsService) {}
+  constructor(private readonly events: EventsService, private readonly registrations: RegistrationsService) {}
 
   @Get()
   list(@CurrentUser() user: User, @Query() filters: EventFiltersDto) {
@@ -71,5 +72,18 @@ export class EventsController {
   @HttpCode(204)
   async remove(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.events.remove(user.id, id);
+  }
+
+  @Post(':id/registration')
+  @RequireAccess('approved')
+  register(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.registrations.register(user.id, id);
+  }
+
+  @Delete(':id/registration')
+  @RequireAccess('approved')
+  @HttpCode(200)
+  withdraw(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.registrations.withdraw(user.id, id);
   }
 }
