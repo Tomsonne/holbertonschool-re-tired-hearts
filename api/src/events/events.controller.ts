@@ -1,10 +1,11 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post,
+  Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query,
 } from '@nestjs/common';
 import { IsString, Length } from 'class-validator';
 import { CurrentUser, RequireAccess } from '../auth/auth.decorators';
 import { User } from '../users/user.entity';
 import { EventInputDto, UpdateEventDto } from './event-input.dto';
+import { EventFiltersDto } from './event-filters.dto';
 import { EventsService } from './events.service';
 
 class CancelEventDto {
@@ -16,6 +17,11 @@ class CancelEventDto {
 @Controller('events')
 export class EventsController {
   constructor(private readonly events: EventsService) {}
+
+  @Get()
+  list(@CurrentUser() user: User, @Query() filters: EventFiltersDto) {
+    return this.events.listPublished(user.id, filters);
+  }
 
   @Post()
   @RequireAccess('organizer')
