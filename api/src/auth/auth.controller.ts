@@ -30,6 +30,8 @@ export class AuthController {
 
   @Post('auth/register')
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
   @ApiCreatedResponse({ type: MeDto })
   async register(
     @Body() input: RegisterDto,

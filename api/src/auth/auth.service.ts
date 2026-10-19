@@ -78,6 +78,9 @@ export class AuthService {
       .where('user.email = :email', { email: input.email })
       .getOne();
 
+    if (!user) {
+      await this.passwordService.verifyAgainstDummy(input.password);
+    }
     if (!user || !(await this.passwordService.verify(user.passwordHash, input.password))) {
       throw new UnauthorizedException({
         statusCode: 401,
@@ -94,8 +97,9 @@ export class AuthService {
       });
     }
 
-    user.lastLoginAt = new Date();
-    await this.users.save(user);
+    const loggedInAt = new Date();
+    await this.users.update({ id: user.id }, { lastLoginAt: loggedInAt });
+    user.lastLoginAt = loggedInAt;
     const profile = await this.profiles.findOneBy({ userId: user.id });
     if (!profile) {
       throw new Error('Le profil associé au compte est introuvable.');

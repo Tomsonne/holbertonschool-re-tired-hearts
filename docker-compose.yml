@@ -33,6 +33,7 @@ services:
       DATABASE_LOGGING: ${DATABASE_LOGGING:-false}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
       JWT_SECRET: ${JWT_SECRET:?Copiez .env.example en .env et renseignez JWT_SECRET}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
     ports:
       - "${API_HOST_PORT:-3000}:3000"
     depends_on:

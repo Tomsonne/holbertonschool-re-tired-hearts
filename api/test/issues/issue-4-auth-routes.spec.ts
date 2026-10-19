@@ -12,7 +12,7 @@ import { AccountStatus, User, UserRole } from '../../src/users/user.entity';
 
 describe('Issue #4 — routes inscription, connexion, déconnexion et /me', () => {
   describe('AuthService', () => {
-    const userRepository = { createQueryBuilder: jest.fn(), save: jest.fn() };
+    const userRepository = { createQueryBuilder: jest.fn(), save: jest.fn(), update: jest.fn() };
     const profileRepository = { findOneBy: jest.fn() };
     const managerUserRepository = { create: jest.fn(), save: jest.fn() };
     const managerProfileRepository = { create: jest.fn(), save: jest.fn() };
@@ -24,7 +24,7 @@ describe('Issue #4 — routes inscription, connexion, déconnexion et /me', () =
         }),
       ),
     };
-    const passwordService = { hash: jest.fn(), verify: jest.fn() };
+    const passwordService = { hash: jest.fn(), verify: jest.fn(), verifyAgainstDummy: jest.fn() };
     const jwtService = { signAsync: jest.fn() };
     const configService = { getOrThrow: jest.fn(() => 'test-secret') };
     let service: AuthService;

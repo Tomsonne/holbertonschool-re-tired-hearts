@@ -7,7 +7,15 @@ import { validationExceptionFactory } from './common/validation';
 
 // Configuration globale partagée par main.ts et les tests bout en bout,
 // pour que les tests passent par la même chaîne que la production.
-export function configureApp(app: INestApplication, options: { swagger: boolean }): void {
+export function configureApp(
+  app: INestApplication,
+  options: { swagger: boolean; trustProxyHops?: number },
+): void {
+  // Derrière un reverse proxy, sans cela toutes les requêtes partagent l'IP du proxy
+  // et la limitation de débit les compte ensemble.
+  if (options.trustProxyHops) {
+    app.getHttpAdapter().getInstance().set('trust proxy', options.trustProxyHops);
+  }
   app.setGlobalPrefix('api');
   app.use(cookieParser());
   app.use(helmet());

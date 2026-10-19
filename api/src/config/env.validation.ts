@@ -37,6 +37,13 @@ class EnvironmentVariables {
   @IsString()
   @MinLength(32)
   JWT_SECRET: string;
+
+  // Nombre de reverse proxies de confiance devant l'API (0 = aucun).
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  TRUST_PROXY_HOPS: number = 0;
 }
 
 // Échoue dès le démarrage en listant les variables manquantes ou invalides,
