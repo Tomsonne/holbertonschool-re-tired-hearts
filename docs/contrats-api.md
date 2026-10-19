@@ -94,7 +94,7 @@ type Me = {
 | Route | Accès | Corps | Réponse | Erreurs |
 |---|---|---|---|---|
 | `GET /api/me/profile` | actif | — | `200 OwnProfile` | `401` |
-| `PUT /api/me/profile` | actif, profil non bloqué | `ProfileInput` | `200 OwnProfile` | `400`, `403 PROFILE_BLOCKED` |
+| `PUT /api/me/profile` | actif, profil non bloqué | `ProfileInput` | `200 OwnProfile` | `400` (dont `location: null` sur un profil approuvé), `403 PROFILE_BLOCKED` |
 | `GET /api/profiles?interestId=&departmentCode=&page=` | approuvé | — | `200 Page<PublicProfile>` | `403 PROFILE_NOT_APPROVED` |
 | `GET /api/profiles/:userId` | approuvé | — | `200 PublicProfile` | `404 PROFILE_UNAVAILABLE` (même réponse pour en attente, bloqué, masqué, suspendu, inconnu) |
 

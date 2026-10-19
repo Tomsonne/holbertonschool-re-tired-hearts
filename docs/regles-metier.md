@@ -82,7 +82,9 @@ Deux statuts indépendants : `users.status` (`active` par défaut, ou `suspended
   révèle pas si le compte existe.
 - **R-PROF-5** Chaque membre corrige ou retire ses informations lui-même : tous les champs
   facultatifs peuvent être vidés. Les modifications d'un profil approuvé restent en ligne
-  (modération a posteriori par blocage). Le changement d'e-mail et la suppression de compte ne sont
+  (modération a posteriori par blocage). Exception : la ville et le département se modifient mais ne
+  se retirent pas tant que le profil est `approved` (R-PROF-2) ; la tentative répond `400` et ne
+  change jamais le statut (R-STATUS-3). Le changement d'e-mail et la suppression de compte ne sont
   pas dans le MVP : ils sont traités manuellement (limite documentée).
 - **R-PROF-6** Un visiteur anonyme ne voit aucune donnée de membre : seulement l'accueil, les centres
   d'intérêt, les mentions légales, la page vie privée, la connexion et l'inscription.

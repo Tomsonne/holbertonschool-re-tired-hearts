@@ -6,6 +6,7 @@ import { buildDataSourceOptions } from './database/typeorm.config';
 import { HealthModule } from './health/health.module';
 import { InterestsModule } from './interests/interests.module';
 import { AuthModule } from './auth/auth.module';
+import { ProfilesModule } from './profiles/profiles.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AuthModule } from './auth/auth.module';
     HealthModule,
     InterestsModule,
     AuthModule,
+    ProfilesModule,
   ],
 })
 export class AppModule {}
