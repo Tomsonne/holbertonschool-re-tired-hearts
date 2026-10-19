@@ -36,6 +36,11 @@ export class EventsController {
     return this.events.detail(user.id, id);
   }
 
+  @Get(':id/participants')
+  participants(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.events.participants(user.id, id);
+  }
+
   @Patch(':id')
   @RequireAccess('organizer')
   async update(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string, @Body() input: UpdateEventDto) {
