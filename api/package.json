@@ -14,9 +14,12 @@
     "migration:show": "npm run typeorm -- migration:show",
     "migration:generate": "npm run typeorm -- migration:generate",
     "migration:run:prod": "typeorm -d dist/database/data-source.js migration:run",
+    "seed": "ts-node src/database/seed.ts",
+    "seed:prod": "node dist/database/seed.js",
     "db:reset": "npm run typeorm -- schema:drop && npm run migration:run",
     "test": "jest",
     "test:issues": "jest --config test/jest-issues.config.json --runInBand",
+    "test:integration": "jest --runInBand --testRegex='.*\\.int-spec\\.ts$'",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
     "lock:refresh": "docker run --rm -v \"$PWD\":/app -w /app node:22-alpine npm install --package-lock-only --no-audit --no-fund"
   },

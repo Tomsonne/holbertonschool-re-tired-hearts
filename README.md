@@ -91,8 +91,38 @@ docker compose down -v && docker compose up --build
 | `InitialSchema` | Types énumérés, les 9 tables, clés, contraintes et index |
 | `SeedInterests` | 16 centres d'intérêt de référence |
 
-Les comptes et données de démonstration ne sont pas des migrations : ils viendront d'un script de
-seed (tâche 5).
+Les comptes de démonstration ne sont pas des migrations. Un script séparé les crée après les
+migrations ; les événements et conversations de démonstration seront ajoutés en tâche 5.
+
+### Comptes de démonstration (issue #7)
+
+Sur une base migrée, exécuter depuis `api/` :
+
+```bash
+npm run seed
+```
+
+Avec Docker Compose, après `docker compose up --build` :
+
+```bash
+docker compose run --rm -e ALLOW_DEMO_SEED=true api npm run seed:prod
+```
+
+Le script crée quatre comptes fictifs avec le mot de passe **`ReTiredDemo2026!`** :
+
+| E-mail | Rôle | Profil |
+|---|---|---|
+| `moderateur@example.test` | modérateur | approuvé, masqué de la découverte |
+| `organisateur@example.test` | organisateur | approuvé |
+| `membre1@example.test` | membre | approuvé |
+| `membre2@example.test` | membre | approuvé |
+
+Ces identifiants sont publics et réservés à une base de démonstration. Le mot de passe peut être
+remplacé via `DEMO_PASSWORD` (12 à 128 caractères). Le script refuse de s'exécuter avec
+`NODE_ENV=production` sans `ALLOW_DEMO_SEED=true`. Il peut être relancé : les comptes existants ne
+sont ni dupliqués ni modifiés, et un e-mail existant avec un autre rôle provoque une erreur plutôt
+qu'une promotion silencieuse. Pour retrouver l'état initial après des modifications de profils,
+réinitialiser la base puis relancer le script.
 
 ## Dépendances et fichiers de lock
 
@@ -115,12 +145,29 @@ lock régénéré.
 
 ```bash
 cd api && npm test               # tests unitaires Jest
+docker compose up -d db           # requis pour les tests d'intégration PostgreSQL
+cd api && npm run test:integration # tests des règles d'événement sur re_tired_hearts_test
 cd web && npm test               # tests de composants Vitest
 ```
 
 Résultats au moment de la livraison de la tâche 0 : **4 tests API** et **3 tests Vue** au vert. Les
 tests bout en bout de l'API (Supertest sur la base `re_tired_hearts_test`, créée automatiquement au
 premier démarrage de PostgreSQL) arrivent avec les routes authentifiées, en tâche 1.
+
+### Tests bout en bout de l'API
+
+Ils démarrent la vraie application sur une base PostgreSQL migrée et **vident les tables** : ils
+refusent de démarrer si `DATABASE_NAME` ne se termine pas par `_test`.
+
+```bash
+docker compose up -d db          # crée aussi re_tired_hearts_test au premier démarrage
+cd api
+DATABASE_HOST=localhost DATABASE_PORT=5442 DATABASE_USER=rth \
+DATABASE_PASSWORD=<valeur de .env> DATABASE_NAME=re_tired_hearts_test \
+JWT_SECRET=<au moins 32 caractères> npm run test:e2e
+```
+
+Sous PowerShell, définissez les variables avec `$env:DATABASE_NAME='re_tired_hearts_test'`, etc.
 
 ## Variables d'environnement
 
@@ -136,6 +183,8 @@ celles qui manquent, sans jamais afficher leur valeur.
 | `API_PORT`, `API_HOST_PORT` | Port de l'API et port publié | `3000` |
 | `WEB_HOST_PORT` | Port publié de l'interface | `8080` |
 | `SWAGGER_ENABLED` | Expose `/api/docs` | `true` |
+| `DEMO_PASSWORD` | Mot de passe des seuls comptes fictifs créés par `npm run seed` | `ReTiredDemo2026!` |
+| `ALLOW_DEMO_SEED` | Autorise explicitement ce script si `NODE_ENV=production` | non défini |
 
 ## Ce que fait la tâche 0
 
@@ -152,6 +201,6 @@ celles qui manquent, sans jamais afficher leur valeur.
 ## Limites connues
 
 - Pas encore d'authentification : les routes actuelles sont publiques et sans donnée personnelle.
-- Pas encore de données de démonstration (comptes membre, organisateur, modérateur) : tâche 5.
+- Les comptes de démonstration existent ; événements, inscriptions et conversations de démonstration arrivent en tâche 5.
 - L'intégration de l'API de recherche de communes est spécifiée mais pas implémentée : tâche 5.
 - Pas de tests bout en bout tant qu'il n'y a pas de route protégée à vérifier.
