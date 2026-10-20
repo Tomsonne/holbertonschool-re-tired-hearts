@@ -79,8 +79,28 @@ describe('Issue #12 — création et cycle de vie des événements', () => {
     await expect(pipe.transform(withoutLocation, createMetadata)).rejects.toMatchObject({ status: 400 });
     await expect(pipe.transform({ ...input(), location: [] }, createMetadata)).rejects.toMatchObject({ status: 400 });
     await expect(pipe.transform({ location: [] }, updateMetadata)).rejects.toMatchObject({ status: 400 });
+    await expect(pipe.transform({ location: null }, updateMetadata)).rejects.toMatchObject({ status: 400 });
     await expect(pipe.transform({ title: 'Promenade modifiée' }, updateMetadata))
       .resolves.toBeInstanceOf(UpdateEventDto);
+  });
+
+  it('bloque la date, le lieu et le centre d’intérêt après la première inscription', async () => {
+    const f = fixture();
+    f.event = await f.service.create('owner', input());
+    await f.service.publish('owner', f.event.id);
+    f.registrations = 1;
+    for (const change of [
+      { startsAt: dateAfter(4).toISOString(), endsAt: dateAfter(5).toISOString() },
+      { location: { ...input().location, cityName: 'Paris' } },
+      { exactAddress: 'Autre adresse' },
+      { interestId: 2 },
+    ]) {
+      await expect(f.service.update('owner', f.event.id, change)).rejects.toMatchObject({
+        response: { code: 'EVENT_HAS_REGISTRATIONS' },
+      });
+    }
+    await expect(f.service.update('owner', f.event.id, { title: 'Nouveau titre' }))
+      .resolves.toMatchObject({ title: 'Nouveau titre' });
   });
 
   it('réserve les routes d’écriture aux organisateurs', () => {
