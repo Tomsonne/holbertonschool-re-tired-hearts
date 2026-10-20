@@ -129,7 +129,7 @@ type OwnProfile = Omit<PublicProfile, 'location'> & {
 
 | Route | Accès | Corps | Réponse | Erreurs |
 |---|---|---|---|---|
-| `GET /api/events?interestId=&cityName=&cityCode=&departmentCode=&from=&page=` | actif, profil non bloqué | — | `200 Page<EventSummary>` (publiés, à venir) | `400` |
+| `GET /api/events?interestId=&cityName=&cityCode=&departmentCode=&from=&page=` | actif, profil non bloqué | — | `200 Page<EventSummary>` (publiés, à venir ; ville sans distinction de casse ni d'accents) | `400` (dont codes INSEE ou département invalides) |
 | `GET /api/events/:id` | actif, profil non bloqué | — | `200 EventDetail` | `404 EVENT_NOT_FOUND` |
 | `POST /api/events` | organisateur | `EventInput` | `201 EventDetail` (statut `draft`) | `400`, `403 ROLE_REQUIRED`, `403 PROFILE_NOT_APPROVED` |
 | `PATCH /api/events/:id` | organisateur propriétaire | `Partial<EventInput>` | `200 EventDetail` | `403 NOT_EVENT_OWNER`, `409 EVENT_NOT_EDITABLE`, `409 CAPACITY_BELOW_REGISTRATIONS` |

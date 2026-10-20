@@ -124,7 +124,13 @@ export class EventsService {
       query.andWhere('event.interest_id = :interestId', { interestId: filters.interestId });
     }
     if (filters.cityName) {
-      query.andWhere('LOWER(event.city_name) = LOWER(:cityName)', { cityName: filters.cityName });
+      const accented = 'àáâäãåçèéêëìíîïñòóôöõùúûüÿ';
+      const plain = 'aaaaaaceeeeiiiinooooouuuuy';
+      query.andWhere('TRANSLATE(LOWER(event.city_name), :accented, :plain) = :cityName', {
+        accented,
+        plain,
+        cityName: filters.cityName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(),
+      });
     }
     if (filters.cityCode) {
       query.andWhere('event.city_code = :cityCode', { cityCode: filters.cityCode });
