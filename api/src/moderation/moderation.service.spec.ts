@@ -2,6 +2,7 @@ import { Reflector } from '@nestjs/core';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { ACCESS_LEVEL_KEY } from '../auth/auth.decorators';
 import { Event, EventStatus } from '../events/event.entity';
+import { EventsService } from '../events/events.service';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { ModerationAction, ModerationActionType } from './moderation-action.entity';
@@ -46,6 +47,8 @@ describe('Issue #23 — modération et journal d’audit', () => {
   let service: ModerationService;
   let transactionManager: Record<string, Record<string, jest.Mock>>;
   let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
+  let eventsRepository: { findOneOrFail: jest.Mock };
+  let eventsService: { cancelByModerator: jest.Mock };
 
   beforeEach(() => {
     target.status = AccountStatus.Active;
@@ -92,11 +95,14 @@ describe('Issue #23 — modération et journal d’audit', () => {
       ),
       getRepository: jest.fn(() => registrationRepository),
     };
+    eventsRepository = { findOneOrFail: jest.fn() };
+    eventsService = { cancelByModerator: jest.fn(async () => undefined) };
     service = new ModerationService(
       dataSource as unknown as DataSource,
+      eventsService as unknown as EventsService,
       userRepository as unknown as Repository<User>,
       profileRepository as unknown as Repository<Profile>,
-      {} as Repository<Event>,
+      eventsRepository as unknown as Repository<Event>,
       {} as Repository<ModerationAction>,
     );
   });
@@ -198,36 +204,23 @@ describe('Issue #23 — modération et journal d’audit', () => {
     );
   });
 
-  it('annule uniquement un événement publié et enregistre l’action d’audit', async () => {
+  it('délègue l’annulation d’un événement à EventsService et renvoie l’état à jour', async () => {
     const event = Object.assign(new Event(), {
       id: 'event-id',
       organizerId: target.id,
       interestId: 1,
+      interest: { id: 1, slug: 'jardinage', label: 'Jardinage' },
       title: 'Sortie jardinage',
-      status: EventStatus.Published,
+      status: EventStatus.Cancelled,
       startsAt: new Date('2027-01-01T10:00:00Z'),
       endsAt: new Date('2027-01-01T12:00:00Z'),
       capacity: 10,
     });
-    transactionManager[Event.name].findOne.mockResolvedValue(event);
-    transactionManager.Interest.findOneByOrFail.mockResolvedValue({
-      id: 1,
-      slug: 'jardinage',
-      label: 'Jardinage',
-    });
+    eventsRepository.findOneOrFail.mockResolvedValue(event);
 
     const result = await service.cancelEvent(moderator, event.id, 'Événement signalé');
 
-    expect(event.status).toBe(EventStatus.Cancelled);
-    expect(event.cancellationReason).toBe('Événement signalé');
-    expect(transactionManager[Event.name].save).toHaveBeenCalledWith(event);
-    expect(transactionManager[ModerationAction.name].insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: ModerationActionType.CancelEvent,
-        targetEventId: event.id,
-        targetUserId: null,
-      }),
-    );
+    expect(eventsService.cancelByModerator).toHaveBeenCalledWith(moderator.id, event.id, 'Événement signalé');
     expect(result).toMatchObject({ id: event.id, status: EventStatus.Cancelled });
   });
 });

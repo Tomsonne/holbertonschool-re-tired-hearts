@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { validateEnv } from './config/env.validation';
 import { buildDataSourceOptions } from './database/typeorm.config';
+import { EventsModule } from './events/events.module';
 import { HealthModule } from './health/health.module';
 import { InterestsModule } from './interests/interests.module';
 import { AuthModule } from './auth/auth.module';
@@ -18,6 +19,7 @@ import { ModerationModule } from './moderation/moderation.module';
     InterestsModule,
     AuthModule,
     ProfilesModule,
+    EventsModule,
     ModerationModule,
   ],
 })

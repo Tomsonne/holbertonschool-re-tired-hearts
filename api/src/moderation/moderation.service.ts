@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { AppException } from '../common/app.exception';
 import { Event, EventStatus } from '../events/event.entity';
+import { EventsService } from '../events/events.service';
 import { EventRegistration, RegistrationStatus } from '../events/event-registration.entity';
 import { Interest } from '../interests/interest.entity';
 import { ProfileInterest } from '../profiles/profile-interest.entity';
@@ -56,6 +57,7 @@ type ModerationUser = {
 export class ModerationService {
   constructor(
     private readonly dataSource: DataSource,
+    private readonly eventsService: EventsService,
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
     @InjectRepository(Event) private readonly events: Repository<Event>,
@@ -127,9 +129,7 @@ export class ModerationService {
     const builder = this.events
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.interest', 'interest')
-      .leftJoinAndSelect('event.organizer', 'organizer')
-      .leftJoin(Profile, 'organizerProfile', 'organizerProfile.user_id = organizer.id')
-      .addSelect('organizerProfile.displayName', 'organizerDisplayName');
+      .leftJoinAndSelect('event.organizer', 'organizer');
     if (query.status) {
       builder.andWhere('event.status = :status', { status: query.status });
     }
@@ -138,7 +138,32 @@ export class ModerationService {
       .skip((query.page - 1) * PAGE_SIZE)
       .take(PAGE_SIZE)
       .getManyAndCount();
-    const items = await Promise.all(events.map((event) => this.toEventDto(event, false)));
+    const ids = events.map((event) => event.id);
+    const organizerIds = [...new Set(events.map((event) => event.organizerId))];
+    const [organizerProfiles, counts] = events.length
+      ? await Promise.all([
+          this.profiles.findBy({ userId: In(organizerIds) }),
+          this.dataSource
+            .getRepository(EventRegistration)
+            .createQueryBuilder('registration')
+            .select('registration.event_id', 'eventId')
+            .addSelect('COUNT(*)', 'count')
+            .where('registration.event_id IN (:...ids)', { ids })
+            .andWhere('registration.status = :status', { status: RegistrationStatus.Registered })
+            .groupBy('registration.event_id')
+            .getRawMany<{ eventId: string; count: string }>(),
+        ])
+      : [[], []];
+    const names = new Map(organizerProfiles.map((profile) => [profile.userId, profile.displayName]));
+    const registered = new Map(counts.map((row) => [row.eventId, Number(row.count)]));
+    const items = await Promise.all(
+      events.map((event) =>
+        this.toEventDto(event, false, undefined, {
+          displayName: names.get(event.organizerId) ?? '',
+          registrations: registered.get(event.id) ?? 0,
+        }),
+      ),
+    );
     return this.page(items, query.page, total);
   }
 
@@ -273,30 +298,10 @@ export class ModerationService {
   }
 
   async cancelEvent(moderator: User, eventId: string, reason: string): Promise<Record<string, unknown>> {
-    return this.dataSource.transaction(async (manager) => {
-      const actor = await this.lockModerator(manager, moderator.id);
-      const event = await manager.getRepository(Event).findOne({
-        where: { id: eventId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!event) {
-        throw this.notFound('EVENT_NOT_FOUND', "Nous n'avons pas trouvé cet événement.");
-      }
-      const organizer = await this.lockTargetUser(manager, event.organizerId, actor.id);
-      if (organizer.role === UserRole.Moderator) {
-        throw this.cannotModerateModerator();
-      }
-      if (event.status !== EventStatus.Published) {
-        throw this.invalidTransition('Seul un événement publié peut être annulé.', 'INVALID_EVENT_TRANSITION');
-      }
-      event.status = EventStatus.Cancelled;
-      event.cancelledAt = new Date();
-      event.cancellationReason = reason;
-      event.interest = await manager.getRepository(Interest).findOneByOrFail({ id: event.interestId });
-      await manager.getRepository(Event).save(event);
-      await this.logAction(manager, actor.id, ModerationActionType.CancelEvent, null, event.id, reason);
-      return this.toEventDto(event, true, manager);
-    });
+    // Verrou, transition, motif et audit sont portés par EventsService (une seule règle d'annulation).
+    await this.eventsService.cancelByModerator(moderator.id, eventId, reason);
+    const event = await this.events.findOneOrFail({ where: { id: eventId }, relations: { interest: true } });
+    return this.toEventDto(event, true);
   }
 
   private async lockModerator(manager: EntityManager, moderatorId: string): Promise<User> {
@@ -418,15 +423,20 @@ export class ModerationService {
     event: Event,
     includeDetails: boolean,
     manager?: EntityManager,
+    preloaded?: { displayName: string; registrations: number },
   ): Promise<Record<string, unknown>> {
-    const profiles = manager?.getRepository(Profile) ?? this.profiles;
-    const registrationsRepository = manager?.getRepository(EventRegistration) ??
-      this.dataSource.getRepository(EventRegistration);
-    const organizerProfile = await profiles.findOneBy({ userId: event.organizerId });
-    const registrations = await registrationsRepository.countBy({
-      eventId: event.id,
-      status: RegistrationStatus.Registered,
-    });
+    let displayName = preloaded?.displayName;
+    let registrations = preloaded?.registrations;
+    if (!preloaded) {
+      const profiles = manager?.getRepository(Profile) ?? this.profiles;
+      const registrationsRepository = manager?.getRepository(EventRegistration) ??
+        this.dataSource.getRepository(EventRegistration);
+      displayName = (await profiles.findOneBy({ userId: event.organizerId }))?.displayName ?? '';
+      registrations = await registrationsRepository.countBy({
+        eventId: event.id,
+        status: RegistrationStatus.Registered,
+      });
+    }
     const summary: Record<string, unknown> = {
       id: event.id,
       title: event.title,
@@ -444,10 +454,10 @@ export class ModerationService {
       status: event.status,
       isPast: event.endsAt.getTime() < Date.now(),
       capacity: event.capacity,
-      availablePlaces: Math.max(0, event.capacity - registrations),
+      availablePlaces: Math.max(0, event.capacity - (registrations ?? 0)),
       organizer: {
         userId: event.organizerId,
-        displayName: organizerProfile?.displayName ?? '',
+        displayName: displayName ?? '',
         isOrganizer: true,
       },
       myRegistration: null,

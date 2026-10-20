@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { EventsModule } from '../events/events.module';
 import { Event } from '../events/event.entity';
 import { EventRegistration } from '../events/event-registration.entity';
 import { Interest } from '../interests/interest.entity';
@@ -23,6 +24,7 @@ import { ModerationService } from './moderation.service';
       ModerationAction,
     ]),
     AuthModule,
+    EventsModule,
   ],
   controllers: [ModerationController],
   providers: [ModerationService],
