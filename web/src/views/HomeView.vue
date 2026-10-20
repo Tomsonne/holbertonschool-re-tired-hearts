@@ -24,7 +24,27 @@ onMounted(charger);
 </script>
 
 <template>
-  <h2>Des activités près de chez vous</h2>
+  <!-- Bandeau illustré : image décorative (alt vide). Le navigateur ne télécharge que la
+       version adaptée à l'écran : très large sur ordinateur, plus haute sur tablette et mobile. -->
+  <section class="bandeau-accueil" aria-labelledby="titre-accueil">
+    <picture>
+      <source
+        media="(min-width: 1100px)"
+        srcset="/images/banniere-1200.webp 1200w, /images/banniere-2000.webp 2000w"
+        sizes="100vw"
+        width="2000"
+        height="330"
+      />
+      <source media="(min-width: 600px)" srcset="/images/banniere-tablette.webp" width="1100" height="434" />
+      <img src="/images/banniere-carree.webp" width="800" height="440" alt="" />
+    </picture>
+    <div class="bandeau-accueil__texte">
+      <p class="surtitre">Bienvenue</p>
+      <h2 id="titre-accueil">Que la belle saison <em>commence</em>&nbsp;!</h2>
+    </div>
+  </section>
+
+  <h2 class="titre-orne">Des activités près de chez vous</h2>
   <p>
     Re-Tired Hearts vous aide à rencontrer des personnes qui partagent vos centres d'intérêt, puis à
     vous retrouver lors d'activités locales. Voici les thèmes déjà proposés.

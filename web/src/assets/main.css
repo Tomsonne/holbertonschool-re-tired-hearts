@@ -1,18 +1,83 @@
 /*
- * Variables de thème. Le public visé a plus de 60 ans : texte de base à 18 px,
- * contrastes conformes WCAG AA, focus toujours visible, cibles de 48 px minimum.
+ * Direction artistique « Belle Époque » (validée le 20/10).
+ * Public de plus de 60 ans : texte de base à 18 px minimum, contrastes WCAG AA
+ * (vérifiés : vert 8,3 et bordeaux 8,5 sur le papier crème), focus toujours visible,
+ * cibles de 48 px minimum. L'or est purement décoratif : jamais utilisé pour du texte.
  */
+
+/* ---------- Polices hébergées dans le projet (licence SIL OFL, voir fonts/LICENCES.md) ---------- */
+@font-face {
+  font-family: "Federo";
+  src: url("./fonts/federo.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Playfair Display";
+  src: url("./fonts/playfair-display.woff2") format("woff2");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Playfair Display";
+  src: url("./fonts/playfair-display-italique.woff2") format("woff2");
+  font-weight: 400 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lora";
+  src: url("./fonts/lora.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lora";
+  src: url("./fonts/lora-italique.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ---------- Variables ---------- */
 :root {
-  --couleur-fond: #fbf8f4;
-  --couleur-surface: #ffffff;
-  --couleur-texte: #1f2933;
-  --couleur-texte-doux: #4a5768;
-  --couleur-bordure: #d4d9e0;
-  --couleur-accent: #1d4e6f;
-  --couleur-accent-clair: #e8f0f5;
-  --couleur-erreur: #a4262c;
-  --rayon: 10px;
+  /* Couleurs */
+  --papier: #f3e9d2;
+  --papier-clair: #fbf5e6;
+  --blanc-casse: #fffdf7;
+  --encre: #2e2a24;
+  --encre-douce: #4a3f35;
+  --vert: #1f4a3a;
+  --vert-fonce: #163629;
+  --vert-clair: #e3ebe2;
+  --bordeaux: #7a1f2b;
+  --bordeaux-fonce: #5a1520;
+  --or: #b88a2e;
+  --or-clair: #d9b871;
+  --filet: #c9b387;
+  --bordure-champ: #6b5d4f;
+
+  /* Polices */
+  --police-texte: "Lora", Georgia, "Times New Roman", serif;
+  --police-titre: "Playfair Display", Georgia, serif;
+  --police-ornement: "Federo", "Playfair Display", Georgia, serif;
+
+  /* Formes */
+  --rayon: 3px;
   --espace: 1rem;
+  --ombre: 0 12px 26px rgba(46, 42, 36, 0.12);
+
+  /* Anciens noms, conservés pour ne rien casser ailleurs */
+  --couleur-fond: var(--papier);
+  --couleur-surface: var(--papier-clair);
+  --couleur-texte: var(--encre);
+  --couleur-texte-doux: var(--encre-douce);
+  --couleur-bordure: var(--filet);
+  --couleur-accent: var(--vert);
+  --couleur-accent-clair: var(--vert-clair);
+  --couleur-erreur: var(--bordeaux);
 }
 
 *,
@@ -27,16 +92,47 @@ html {
 
 body {
   margin: 0;
-  background: var(--couleur-fond);
-  color: var(--couleur-texte);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--papier);
+  color: var(--encre);
+  font-family: var(--police-texte);
+  font-size: 1.05rem;
   line-height: 1.6;
+  /* le bandeau pleine largeur (100vw) ne doit pas créer de défilement horizontal */
+  overflow-x: clip;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--police-titre);
+  font-weight: 700;
+  color: var(--vert);
+  line-height: 1.15;
+}
+
+h2 {
+  font-size: 2rem;
+  margin: 0 0 0.75rem;
+}
+
+h3 {
+  font-size: 1.4rem;
+  margin: 0 0 0.75rem;
+}
+
+a {
+  color: var(--bordeaux);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+a:hover {
+  color: var(--bordeaux-fonce);
 }
 
 /* Le focus doit rester parfaitement visible pour la navigation au clavier. */
 :focus-visible {
-  outline: 3px solid var(--couleur-accent);
-  outline-offset: 2px;
+  outline: 3px solid var(--vert);
+  outline-offset: 3px;
 }
 
 /* Lien d'évitement : premier élément focusable, visible seulement au clavier. */
@@ -44,8 +140,8 @@ body {
   position: absolute;
   left: -9999px;
   top: 0;
-  background: var(--couleur-accent);
-  color: #fff;
+  background: var(--vert);
+  color: var(--papier);
   padding: 0.75rem 1rem;
   z-index: 10;
 }
@@ -53,94 +149,405 @@ body {
   left: 0;
 }
 
+/* Texte réservé aux lecteurs d'écran (invisible à l'écran, mais lu). */
+.visuellement-cache {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .contenu {
-  max-width: 60rem;
+  max-width: 64rem;
   margin: 0 auto;
   padding: 0 var(--espace);
 }
 
+/* ---------- En-tête ---------- */
 .en-tete-site {
-  background: var(--couleur-surface);
-  border-bottom: 1px solid var(--couleur-bordure);
-  padding: var(--espace) 0;
+  background: var(--papier);
+  border-bottom: 1px solid var(--filet);
+  box-shadow: 0 4px 0 -2px var(--papier), 0 5px 0 -2px var(--or-clair);
+  padding: 0.9rem 0;
 }
 
-.en-tete-site p {
-  margin: 0.25rem 0 0;
-  color: var(--couleur-texte-doux);
+.en-tete-site__ligne {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espace);
 }
 
 .titre-site {
   margin: 0;
-  font-size: 1.6rem;
-  color: var(--couleur-accent);
+  font-family: var(--police-ornement);
+  font-weight: 400;
+  font-size: 1.9rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.titre-site a {
+  color: var(--vert);
+  text-decoration: none;
+}
+
+.en-tete-site p {
+  margin: 0.2rem 0 0;
+  font-family: var(--police-titre);
+  font-style: italic;
+  font-weight: 600;
+  color: var(--bordeaux);
+}
+
+.nav-session {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.nav-session .bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.en-tete-site .nav-session__erreur {
+  flex-basis: 100%;
+  margin: 0;
+  font-family: var(--police-texte);
+  font-style: normal;
+  font-weight: 700;
+  color: var(--bordeaux);
+}
+
+.en-tete-site .nav-session__nom {
+  margin: 0;
+  font-family: var(--police-texte);
+  font-style: normal;
+  font-weight: 400;
+  color: var(--encre);
+}
+
+.bandeau-statut {
+  margin: var(--espace) 0 0;
 }
 
 main {
   padding: 2rem 0 3rem;
 }
 
-h2 {
-  font-size: 1.4rem;
-}
-
-.carte {
-  background: var(--couleur-surface);
-  border: 1px solid var(--couleur-bordure);
+/* ---------- Boutons ---------- */
+.bouton {
+  font: inherit;
+  font-family: var(--police-ornement);
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  min-height: 52px;
+  padding: 0.6rem 1.4rem;
   border-radius: var(--rayon);
-  padding: 1.25rem;
+  border: 1px solid var(--bordeaux-fonce);
+  background: var(--bordeaux);
+  color: var(--papier);
+  /* double filet doré, comme sur les affiches d'époque */
+  box-shadow: inset 0 0 0 4px var(--bordeaux), inset 0 0 0 5px var(--or-clair);
+  cursor: pointer;
+}
+/* Un bouton peut être un <a> (RouterLink) : on fixe la couleur du texte au survol,
+   sinon la règle a:hover (bordeaux foncé) l'emporte et le texte disparaît. */
+a.bouton {
+  text-decoration: none;
+}
+.bouton:hover {
+  background: var(--bordeaux-fonce);
+  color: var(--papier);
+  box-shadow: inset 0 0 0 4px var(--bordeaux-fonce), inset 0 0 0 5px var(--or-clair);
+}
+.bouton:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
-/* États partagés : chargement, vide, erreur. */
+.bouton--secondaire {
+  background: transparent;
+  color: var(--vert);
+  border: 2px solid var(--vert);
+  box-shadow: none;
+}
+.bouton--secondaire:hover {
+  background: var(--vert-clair);
+  color: var(--vert);
+  box-shadow: none;
+}
+
+/* ---------- Cartes et messages ---------- */
+.carte {
+  background: var(--papier-clair);
+  border: 1px solid var(--filet);
+  outline: 1px solid var(--filet);
+  outline-offset: -7px;
+  border-radius: var(--rayon);
+  padding: 1.6rem;
+  box-shadow: var(--ombre);
+}
+
 .message {
   border-radius: var(--rayon);
-  padding: 1rem;
-  border: 1px solid var(--couleur-bordure);
-  background: var(--couleur-surface);
-}
-.message--erreur {
-  border-color: var(--couleur-erreur);
-  color: var(--couleur-erreur);
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--filet);
+  background: var(--papier-clair);
 }
 
+.message--erreur {
+  border: 2px solid var(--bordeaux);
+  color: var(--bordeaux);
+}
+
+.message--info {
+  border: 2px solid var(--vert);
+  background: var(--vert-clair);
+  color: var(--vert-fonce);
+  margin-bottom: var(--espace);
+}
+
+.message--succes {
+  border: 2px solid var(--vert);
+  outline: 1px solid var(--vert);
+  outline-offset: -8px;
+}
+
+/* ---------- Formulaires ---------- */
+.formulaire {
+  max-width: 34rem;
+}
+
+.champ {
+  margin-bottom: 1.3rem;
+}
+
+.champ label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  color: var(--vert);
+}
+
+.champ input {
+  font: inherit;
+  width: 100%;
+  min-height: 52px;
+  padding: 0.6rem 0.8rem;
+  border: 2px solid var(--bordure-champ);
+  border-radius: var(--rayon);
+  background: var(--blanc-casse);
+  color: var(--encre);
+}
+
+.champ input[aria-invalid='true'] {
+  border-color: var(--bordeaux);
+  background: #fdf3f1;
+}
+
+.champ__groupe {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.champ__groupe input {
+  flex: 1;
+  min-width: 0;
+}
+
+.champ__aide {
+  margin: 0 0 0.35rem;
+  color: var(--encre-douce);
+  font-style: italic;
+}
+
+.champ__erreur {
+  margin: 0.35rem 0 0;
+  color: var(--bordeaux);
+  font-weight: 700;
+}
+
+.champ__erreur a {
+  color: var(--bordeaux);
+  margin-left: 0.25rem;
+}
+
+.resume-erreurs {
+  margin-bottom: 1.3rem;
+}
+
+.resume-erreurs__titre {
+  margin: 0;
+  font-weight: 700;
+}
+
+.resume-erreurs ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.resume-erreurs a {
+  color: var(--bordeaux);
+}
+
+.lien-secondaire a {
+  font-weight: 700;
+}
+
+/* ---------- Centres d'intérêt ---------- */
 .liste-interets {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .liste-interets li {
-  background: var(--couleur-accent-clair);
-  border: 1px solid var(--couleur-bordure);
+  background: var(--blanc-casse);
+  border: 1px solid var(--or);
   border-radius: 999px;
-  padding: 0.5rem 1rem;
+  padding: 0.45rem 1.1rem;
+  color: var(--vert);
+  font-weight: 600;
 }
 
-.bouton {
-  font: inherit;
-  min-height: 48px;
-  padding: 0.6rem 1.25rem;
-  border-radius: var(--rayon);
-  border: 1px solid var(--couleur-accent);
-  background: var(--couleur-accent);
-  color: #fff;
-  cursor: pointer;
-}
-.bouton:hover {
-  background: #163e59;
+/* ---------- Ornements ---------- */
+.titre-orne {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  text-align: center;
 }
 
+.titre-orne::before,
+.titre-orne::after {
+  content: "";
+  flex: 0 1 9rem;
+  height: 20px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='20' viewBox='0 0 160 20'%3E%3Cpath d='M0 10 H60 C 70 10, 72 2, 80 2 C 88 2, 90 10, 100 10 H160 M80 18 C 74 18, 72 12, 80 10 C 88 12, 86 18, 80 18' stroke='%23b88a2e' stroke-width='1.6' fill='none'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.surtitre {
+  margin: 0;
+  font-family: var(--police-ornement);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--bordeaux);
+  font-size: 0.85rem;
+}
+
+/* ---------- Bandeau illustré de l'accueil ---------- */
+.bandeau-accueil {
+  position: relative;
+  /* pleine largeur, même à l'intérieur de .contenu */
+  width: 100vw;
+  max-width: 2000px;
+  margin: -1rem 0 2rem 50%;
+  transform: translateX(-50%);
+}
+
+.bandeau-accueil picture,
+.bandeau-accueil img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.bandeau-accueil__texte {
+  position: absolute;
+  left: 4.6%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 21%;
+}
+
+.bandeau-accueil__texte h2 {
+  margin: 0.3rem 0 0;
+  font-size: clamp(1.4rem, 2.3vw, 2.6rem);
+  line-height: 1.08;
+}
+
+.bandeau-accueil__texte em {
+  color: var(--bordeaux);
+}
+
+/* ---------- Pied de page ---------- */
 .pied-site {
-  border-top: 1px solid var(--couleur-bordure);
-  padding: var(--espace) 0;
-  color: var(--couleur-texte-doux);
+  background: var(--vert);
+  color: var(--papier);
+  border-top: 4px double var(--or-clair);
+  padding: 1.2rem 0;
+  text-align: center;
+}
+
+.pied-site p {
+  margin: 0;
+}
+
+/* ---------- Tablette : bandeau plus haut (format 2,5:1), texte dans la zone crème ---------- */
+@media (min-width: 600px) and (max-width: 1099px) {
+  .bandeau-accueil__texte {
+    left: 6%;
+    width: 30%;
+  }
+  .bandeau-accueil__texte h2 {
+    font-size: clamp(1.5rem, 3.6vw, 2.3rem);
+  }
+}
+
+/* ---------- Mobile : image recadrée sur les promeneurs, texte en dessous ---------- */
+@media (max-width: 599px) {
+  .bandeau-accueil img {
+    height: 230px;
+    object-fit: cover;
+    object-position: 68% center;
+  }
+  .bandeau-accueil__texte {
+    position: static;
+    transform: none;
+    width: auto;
+    padding: 1rem var(--espace) 0;
+  }
+  .bandeau-accueil__texte h2 {
+    font-size: 1.8rem;
+  }
 }
 
 @media (max-width: 40rem) {
   .bouton {
     width: 100%;
+  }
+  .champ__groupe .bouton,
+  .nav-session .bouton {
+    width: auto;
+  }
+  .titre-site {
+    font-size: 1.5rem;
+  }
+  /* sur téléphone, les ornements prendraient la place du titre */
+  .titre-orne {
+    display: block;
+    text-align: left;
+  }
+  .titre-orne::before,
+  .titre-orne::after {
+    display: none;
   }
 }
