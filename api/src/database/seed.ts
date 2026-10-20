@@ -1,6 +1,6 @@
-import { Algorithm, hash } from '@node-rs/argon2';
 import { DataSource, EntityManager } from 'typeorm';
 import dataSource from './data-source';
+import { PasswordService } from '../auth/password.service';
 import { Interest } from '../interests/interest.entity';
 import { ProfileInterest } from '../profiles/profile-interest.entity';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
@@ -65,12 +65,7 @@ async function createAccount(
     return 'existing';
   }
 
-  const passwordHash = await hash(password, {
-    algorithm: Algorithm.Argon2id,
-    memoryCost: 19456,
-    timeCost: 2,
-    parallelism: 1,
-  });
+  const passwordHash = await new PasswordService().hash(password);
   const user = await manager.save(
     manager.create(User, {
       email: account.email,
@@ -121,10 +116,14 @@ export async function seedDemoAccounts(db: DataSource, password: string): Promis
   });
 }
 
-async function main(): Promise<void> {
-  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true') {
+export function assertDemoSeedAllowed(environment: NodeJS.ProcessEnv): void {
+  if (environment.NODE_ENV === 'production' && environment.ALLOW_DEMO_SEED !== 'true') {
     throw new Error('Seed de démonstration refusé en production sans ALLOW_DEMO_SEED=true.');
   }
+}
+
+async function main(): Promise<void> {
+  assertDemoSeedAllowed(process.env);
 
   await dataSource.initialize();
   try {

@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { DataSource, EntityManager } from 'typeorm';
-import { DEMO_ACCOUNTS, seedDemoAccounts } from '../../src/database/seed';
+import { assertDemoSeedAllowed, DEMO_ACCOUNTS, seedDemoAccounts } from '../../src/database/seed';
 import { Interest } from '../../src/interests/interest.entity';
 import { ProfileInterest } from '../../src/profiles/profile-interest.entity';
 import { Profile, ProfileStatus } from '../../src/profiles/profile.entity';
@@ -67,6 +67,25 @@ describe('Issue #7 — comptes de démonstration', () => {
     expect(profiles).toHaveLength(4);
     expect(links).toHaveLength(7);
     expect(manager.save).toHaveBeenCalledTimes(8);
+  });
+
+  it('refuse un compte existant dont le rôle ne correspond pas', async () => {
+    const { db, users, profiles } = database();
+    users.set(DEMO_ACCOUNTS[0].email, Object.assign(new User(), {
+      email: DEMO_ACCOUNTS[0].email,
+      role: UserRole.Member,
+      status: AccountStatus.Active,
+    }));
+
+    await expect(seedDemoAccounts(db, password)).rejects.toThrow('déjà présent avec un autre rôle');
+    expect(users.size).toBe(1);
+    expect(profiles).toHaveLength(0);
+  });
+
+  it('refuse le seed en production sans autorisation explicite', () => {
+    expect(() => assertDemoSeedAllowed({ NODE_ENV: 'production' })).toThrow('ALLOW_DEMO_SEED=true');
+    expect(() => assertDemoSeedAllowed({ NODE_ENV: 'production', ALLOW_DEMO_SEED: 'true' })).not.toThrow();
+    expect(() => assertDemoSeedAllowed({ NODE_ENV: 'test' })).not.toThrow();
   });
 
   it('refuse un mot de passe trop court et documente les identifiants fictifs', async () => {
