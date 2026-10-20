@@ -256,18 +256,17 @@ export class EventsService {
       .innerJoin(Profile, 'profile', 'profile.user_id = participant.id')
       .select('participant.id', 'userId')
       .addSelect('profile.display_name', 'displayName')
-      .addSelect('participant.role', 'role')
       .where('registration.event_id = :eventId', { eventId: id })
       .andWhere('registration.status = :registered', { registered: RegistrationStatus.Registered })
       .andWhere('participant.status = :active', { active: AccountStatus.Active })
       .andWhere('profile.status = :approved', { approved: ProfileStatus.Approved })
       .orderBy('profile.display_name', 'ASC')
       .addOrderBy('participant.id', 'ASC')
-      .getRawMany<{ userId: string; displayName: string; role: UserRole }>();
-    return rows.map(({ userId, displayName, role }) => ({
+      .getRawMany<{ userId: string; displayName: string }>();
+    return rows.map(({ userId, displayName }) => ({
       userId,
       displayName,
-      isOrganizer: role === UserRole.Organizer,
+      isOrganizer: userId === event.organizerId,
     }));
   }
 

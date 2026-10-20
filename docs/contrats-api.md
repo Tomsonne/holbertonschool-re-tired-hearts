@@ -59,7 +59,7 @@ détail interne :
 type Location = { cityName: string; departmentCode: string };          // visible des membres
 type PrivateLocation = Location & { postalCode: string | null; cityCode: string | null; verified: boolean };
 type Interest = { id: number; slug: string; label: string };
-type MemberSummary = { userId: string; displayName: string; isOrganizer: boolean };
+type MemberSummary = { userId: string; displayName: string; isOrganizer: boolean }; // organisateur de cette sortie
 type Page<T> = { items: T[]; page: number; pageSize: number; total: number };
 ```
 

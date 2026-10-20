@@ -27,7 +27,7 @@ function fixture() {
     query[method] = jest.fn(() => query);
   }
   query.getRawMany = jest.fn(async () => [
-    { userId: 'member-1', displayName: 'Alex', role: UserRole.Member, email: 'prive@example.test' },
+    { userId: 'member-1', displayName: 'Alex', role: UserRole.Organizer, email: 'prive@example.test' },
   ]);
   const manager = {
     findOneBy: jest.fn(async (entity: unknown, where: { id?: string; userId?: string }) => {
@@ -91,5 +91,7 @@ describe('Issue #15 — liste des participants et adresse exacte', () => {
     expect(f.query.andWhere).toHaveBeenCalledWith('profile.status = :approved', { approved: ProfileStatus.Approved });
     expect(JSON.stringify(list)).not.toContain('prive@example.test');
     expect(JSON.stringify(list)).not.toContain('email');
+    expect(list[0].isOrganizer).toBe(false);
+    expect(f.query.addSelect).not.toHaveBeenCalledWith('participant.role', 'role');
   });
 });
