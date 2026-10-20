@@ -221,6 +221,15 @@ a:hover {
   text-decoration: none;
 }
 
+.en-tete-site .nav-session__erreur {
+  flex-basis: 100%;
+  margin: 0;
+  font-family: var(--police-texte);
+  font-style: normal;
+  font-weight: 700;
+  color: var(--bordeaux);
+}
+
 .en-tete-site .nav-session__nom {
   margin: 0;
   font-family: var(--police-texte);

@@ -66,14 +66,29 @@ describe("zone de session de l'en-tête", () => {
     expect(wrapper.text()).toContain('Se connecter');
   });
 
-  it("déconnecte l'interface même si l'API ne répond pas", async () => {
+  it("signale une déconnexion échouée, reste connecté et permet de réessayer", async () => {
     vi.mocked(authApi.fetchMe).mockResolvedValue(membre);
-    vi.mocked(authApi.logout).mockRejectedValue(new ApiError(0, 'NETWORK_ERROR', 'Indisponible'));
-    const { wrapper } = await monter();
+    vi.mocked(authApi.logout)
+      .mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'Indisponible'))
+      .mockResolvedValueOnce(undefined);
+    const { wrapper, router } = await monter();
 
     await wrapper.get('button').trigger('click');
     await flushPromises();
 
+    // Échec : le membre est toujours connecté, sur la même page, et il est prévenu.
+    expect(useSessionStore().estConnecte).toBe(true);
+    expect(router.currentRoute.value.name).toBe('page');
+    expect(wrapper.get('[role="alert"]').text()).toContain('n’a pas abouti');
+    expect(wrapper.get('button').text()).toBe('Réessayer la déconnexion');
+
+    // Nouvel essai réussi : déconnexion effective et retour à l'accueil.
+    await wrapper.get('button').trigger('click');
+    await flushPromises();
+
+    expect(authApi.logout).toHaveBeenCalledTimes(2);
     expect(useSessionStore().estConnecte).toBe(false);
+    expect(router.currentRoute.value.name).toBe('accueil');
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
   });
 });

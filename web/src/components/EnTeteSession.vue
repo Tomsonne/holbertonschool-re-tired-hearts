@@ -8,14 +8,20 @@ import { useSessionStore } from '../stores/session';
 const session = useSessionStore();
 const router = useRouter();
 const deconnexionEnCours = ref(false);
+const erreurDeconnexion = ref<string | null>(null);
 
 async function seDeconnecter(): Promise<void> {
   if (deconnexionEnCours.value) return;
   deconnexionEnCours.value = true;
+  erreurDeconnexion.value = null;
   try {
     await session.deconnexion();
   } catch {
-    // Même si l'API ne répond pas, le magasin a oublié la session : l'interface est déconnectée.
+    // La requête n'a pas abouti : le cookie est peut-être encore valide. On ne fait pas croire
+    // à une déconnexion réussie ; le membre reste connecté et peut réessayer.
+    erreurDeconnexion.value =
+      'La déconnexion n’a pas abouti. Vérifiez votre connexion internet, puis réessayez.';
+    return;
   } finally {
     deconnexionEnCours.value = false;
   }
@@ -31,8 +37,11 @@ async function seDeconnecter(): Promise<void> {
         Connecté en tant que <strong>{{ session.utilisateur?.displayName }}</strong>
       </p>
       <button type="button" class="bouton bouton--secondaire" :disabled="deconnexionEnCours" @click="seDeconnecter">
-        {{ deconnexionEnCours ? 'Déconnexion…' : 'Se déconnecter' }}
+        {{ deconnexionEnCours ? 'Déconnexion…' : erreurDeconnexion ? 'Réessayer la déconnexion' : 'Se déconnecter' }}
       </button>
+      <p v-if="erreurDeconnexion" class="message message--erreur nav-session__erreur" role="alert">
+        {{ erreurDeconnexion }}
+      </p>
     </template>
     <template v-else>
       <RouterLink class="bouton bouton--secondaire" :to="{ name: 'connexion' }">Se connecter</RouterLink>

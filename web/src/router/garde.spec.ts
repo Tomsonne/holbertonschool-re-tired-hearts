@@ -75,6 +75,30 @@ describe('garde de navigation', () => {
 
     expect(router.currentRoute.value.name).toBe('accueil');
   });
+
+  it('explique une session expirée détectée au démarrage puis ramène à la page demandée (R-AUTH-6)', async () => {
+    vi.mocked(authApi.fetchMe).mockRejectedValue(new ApiError(401, 'SESSION_EXPIRED', 'Session expirée.'));
+    const router = routeurDeTest();
+
+    await router.push('/mon-profil');
+
+    expect(router.currentRoute.value.name).toBe('connexion');
+    expect(router.currentRoute.value.query).toEqual({ redirect: '/mon-profil', raison: 'session-expiree' });
+
+    // Le message n'est donné qu'une fois : la navigation suivante est normale.
+    await router.push('/');
+    expect(router.currentRoute.value.name).toBe('accueil');
+  });
+
+  it("ajoute l'explication si le membre arrive directement sur la connexion avec un cookie expiré", async () => {
+    vi.mocked(authApi.fetchMe).mockRejectedValue(new ApiError(401, 'SESSION_EXPIRED', 'Session expirée.'));
+    const router = routeurDeTest();
+
+    await router.push('/connexion?redirect=/mon-profil');
+
+    expect(router.currentRoute.value.name).toBe('connexion');
+    expect(router.currentRoute.value.query).toEqual({ redirect: '/mon-profil', raison: 'session-expiree' });
+  });
 });
 
 describe('cheminDeRetour', () => {

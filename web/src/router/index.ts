@@ -38,7 +38,8 @@ router.afterEach((to) => {
 // puis retour à la page en cours.
 quandSessionExpire(() => {
   const session = useSessionStore();
-  // Si l'on ne se croyait pas connecté (ex. vieux cookie au démarrage), il n'y a rien à expliquer.
+  // Expiration au démarrage (GET /me) : utilisateur pas encore chargé. C'est la garde de
+  // navigation qui affiche alors le message, grâce à session.sessionExpiree (voir garde.ts).
   if (!session.estConnecte) return;
   session.oublierSession();
 

@@ -22,6 +22,18 @@ export async function gardeDeSession(to: RouteLocationNormalized): Promise<true 
   // « personne en mémoire » ne veut pas dire « déconnecté ».
   await session.verifierSession();
 
+  // R-AUTH-6 au démarrage : GET /me a répondu SESSION_EXPIRED (cookie expiré, ou session
+  // invalidée par une suspension). On l'explique sur la page de connexion, puis on ramènera
+  // le membre ici. consommerExpiration() ne renvoie true qu'une fois : pas de boucle.
+  if (session.consommerExpiration()) {
+    if (to.name === 'connexion') {
+      return to.query.raison === 'session-expiree'
+        ? true
+        : { name: 'connexion', query: { ...to.query, raison: 'session-expiree' } };
+    }
+    return { name: 'connexion', query: { redirect: to.fullPath, raison: 'session-expiree' } };
+  }
+
   if (to.meta.connexionRequise && !session.estConnecte) {
     // On garde la page demandée pour y revenir après la connexion.
     return { name: 'connexion', query: { redirect: to.fullPath } };
