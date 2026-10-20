@@ -12,7 +12,7 @@
 | Niveau | Signification |
 |---|---|
 | **public** | Aucune session nécessaire |
-| **session** | Session valide, même si le compte est suspendu (seulement `GET /me` et `POST /auth/logout`) |
+| **session** | Jeton non expiré ; compte suspendu admis uniquement sur `GET /me` et `POST /auth/logout` |
 | **actif** | Session valide + compte `active` (le profil peut être en attente) |
 | **approuvé** | **actif** + profil `approved` |
 | **organisateur** | **approuvé** + rôle `organizer` |
@@ -20,6 +20,11 @@
 
 Ordre de vérification : authentification → statut du compte → statut du profil → rôle → propriété de
 la ressource (dans le service).
+
+La suspension incrémente `session_version`. Un jeton déjà émis reste admis uniquement pour
+`GET /api/me` et `POST /api/auth/logout`; il est rejeté sur toute autre route protégée. Une
+connexion ultérieure au compte suspendu répond `403 ACCOUNT_SUSPENDED`. Après réactivation,
+l'ancienne version du jeton est rejetée.
 
 ## Format d'erreur
 
@@ -89,7 +94,7 @@ type Me = {
 | Route | Accès | Corps | Réponse | Erreurs |
 |---|---|---|---|---|
 | `GET /api/me/profile` | actif | — | `200 OwnProfile` | `401` |
-| `PUT /api/me/profile` | actif, profil non bloqué | `ProfileInput` | `200 OwnProfile` | `400`, `403 PROFILE_BLOCKED` |
+| `PUT /api/me/profile` | actif, profil non bloqué | `ProfileInput` | `200 OwnProfile` | `400` (dont `location: null` sur un profil approuvé), `403 PROFILE_BLOCKED` |
 | `GET /api/profiles?interestId=&departmentCode=&page=` | approuvé | — | `200 Page<PublicProfile>` | `403 PROFILE_NOT_APPROVED` |
 | `GET /api/profiles/:userId` | approuvé | — | `200 PublicProfile` | `404 PROFILE_UNAVAILABLE` (même réponse pour en attente, bloqué, masqué, suspendu, inconnu) |
 

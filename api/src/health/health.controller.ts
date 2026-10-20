@@ -1,6 +1,7 @@
 import { Controller, Get, HttpStatus } from '@nestjs/common';
 import { ApiOkResponse, ApiProperty, ApiServiceUnavailableResponse, ApiTags } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
+import { Public } from '../auth/auth.decorators';
 import { AppException } from '../common/app.exception';
 
 class HealthDto {
@@ -19,6 +20,7 @@ export class HealthController {
   constructor(private readonly dataSource: DataSource) {}
 
   @Get()
+  @Public()
   @ApiOkResponse({ type: HealthDto, description: "L'API et PostgreSQL répondent" })
   @ApiServiceUnavailableResponse({ description: 'PostgreSQL est injoignable' })
   async check(): Promise<HealthDto> {

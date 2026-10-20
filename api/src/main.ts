@@ -9,7 +9,10 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
-  configureApp(app, { swagger: config.get('SWAGGER_ENABLED') === 'true' });
+  configureApp(app, {
+    swagger: config.get('SWAGGER_ENABLED') === 'true',
+    trustProxyHops: config.get<number>('TRUST_PROXY_HOPS', 0),
+  });
   app.enableShutdownHooks();
 
   const port = config.get<number>('API_PORT', 3000);

@@ -32,8 +32,12 @@ services:
       DATABASE_NAME: ${DATABASE_NAME:-re_tired_hearts}
       DATABASE_LOGGING: ${DATABASE_LOGGING:-false}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      JWT_SECRET: ${JWT_SECRET:?Copiez .env.example en .env et renseignez JWT_SECRET}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
     ports:
-      - "${API_HOST_PORT:-3000}:3000"
+      # Accès direct réservé à la machine locale : depuis le réseau, tout passe par nginx (web),
+      # sinon un client pourrait falsifier X-Forwarded-For et contourner la limitation de débit.
+      - "127.0.0.1:${API_HOST_PORT:-3000}:3000"
     depends_on:
       # PostgreSQL doit être prêt avant que les migrations ne soient jouées.
       db:
