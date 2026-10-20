@@ -152,6 +152,21 @@ Résultats au moment de la livraison de la tâche 0 : **4 tests API** et **3 tes
 tests bout en bout de l'API (Supertest sur la base `re_tired_hearts_test`, créée automatiquement au
 premier démarrage de PostgreSQL) arrivent avec les routes authentifiées, en tâche 1.
 
+### Tests bout en bout de l'API
+
+Ils démarrent la vraie application sur une base PostgreSQL migrée et **vident les tables** : ils
+refusent de démarrer si `DATABASE_NAME` ne se termine pas par `_test`.
+
+```bash
+docker compose up -d db          # crée aussi re_tired_hearts_test au premier démarrage
+cd api
+DATABASE_HOST=localhost DATABASE_PORT=5442 DATABASE_USER=rth \
+DATABASE_PASSWORD=<valeur de .env> DATABASE_NAME=re_tired_hearts_test \
+JWT_SECRET=<au moins 32 caractères> npm run test:e2e
+```
+
+Sous PowerShell, définissez les variables avec `$env:DATABASE_NAME='re_tired_hearts_test'`, etc.
+
 ## Variables d'environnement
 
 Toutes sont décrites dans [`.env.example`](.env.example). `.env` est ignoré par Git et ne doit
