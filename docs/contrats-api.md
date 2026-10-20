@@ -170,8 +170,8 @@ type EventDetail = EventSummary & {
 
 | Route | Accès | Réponse | Erreurs |
 |---|---|---|---|
-| `POST /api/events/:id/registration` | approuvé | `201 { status: 'registered', availablePlaces }` (y compris en réactivant une inscription retirée) | `403 OWN_EVENT`, `404 EVENT_NOT_FOUND`, `409 ALREADY_REGISTERED`, `409 EVENT_FULL`, `409 EVENT_NOT_OPEN` |
-| `DELETE /api/events/:id/registration` | approuvé | `200 { status: 'withdrawn', availablePlaces }` | `404 NOT_REGISTERED`, `409 EVENT_NOT_OPEN` (déjà commencé) |
+| `POST /api/events/:id/registration` | approuvé | `201 { status: 'registered', availablePlaces }` (y compris en réactivant une inscription retirée) | `403 OWN_EVENT`, `404 EVENT_NOT_FOUND` (dont brouillon), `409 ALREADY_REGISTERED`, `409 EVENT_FULL`, `409 EVENT_NOT_OPEN` |
+| `DELETE /api/events/:id/registration` | actif, même si le profil n'est plus approuvé | `200 { status: 'withdrawn', availablePlaces }` | `404 NOT_REGISTERED`, `409 EVENT_NOT_OPEN` (déjà commencé) |
 | `GET /api/me/registrations?scope=upcoming\|past` | actif | `200 EventSummary[]` | — |
 
 Aucune route ne prend d'identifiant d'inscription : c'est toujours celle de la session.
