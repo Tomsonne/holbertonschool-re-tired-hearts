@@ -360,6 +360,14 @@ export class EventsService {
         if (actor.user.role !== UserRole.Moderator) {
           throw new AppException(HttpStatus.FORBIDDEN, 'ROLE_REQUIRED', 'Seul un modérateur peut effectuer cette action.');
         }
+        const organizer = await manager.findOne(User, { where: { id: event.organizerId } });
+        if (organizer?.role === UserRole.Moderator) {
+          throw new AppException(
+            HttpStatus.FORBIDDEN,
+            'CANNOT_MODERATE_MODERATOR',
+            'Un modérateur ne peut pas modérer un autre modérateur.',
+          );
+        }
       } else {
         this.requireOwner(event, actor);
       }

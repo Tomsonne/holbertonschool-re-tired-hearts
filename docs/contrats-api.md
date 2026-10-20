@@ -202,7 +202,7 @@ type Message = { id: string; body: string; sentByMe: boolean; senderDisplayName:
 
 | Route | Corps | Réponse | Erreurs |
 |---|---|---|---|
-| `GET /api/moderation/profiles?status=pending&page=` | — | `200 Page<ModerationProfile>` | `403 ROLE_REQUIRED` |
+| `GET /api/moderation/profiles?status=pending&page=` | — | `200 Page<ModerationProfile>` (pending par défaut) | `403 ROLE_REQUIRED` |
 | `POST /api/moderation/profiles/:userId/approve` | `{ reason? }` | `200 ModerationProfile` | `404`, `409 INVALID_STATUS_TRANSITION`, `409 PROFILE_INCOMPLETE`, `403 CANNOT_MODERATE_MODERATOR` |
 | `POST /api/moderation/profiles/:userId/block` | `{ reason }` | `200` | `404`, `409`, `403` |
 | `POST /api/moderation/profiles/:userId/unblock` | `{ reason? }` | `200` | `404`, `409` |
@@ -213,5 +213,35 @@ type Message = { id: string; body: string; sentByMe: boolean; senderDisplayName:
 | `GET /api/moderation/events?status=&page=` | — | `200 Page<EventSummary>` | `403` |
 | `POST /api/moderation/events/:id/cancel` | `{ reason }` | `200 EventDetail` | `404`, `409 INVALID_EVENT_TRANSITION` |
 | `GET /api/moderation/actions?page=` | — | `200 Page<ModerationActionEntry>` | `403` |
+
+Les pages contiennent 20 éléments (`pageSize: 20`). `q` filtre les comptes par e-mail ou nom affiché.
+Toutes les actions `POST`/`PUT` répondent `200` avec l'état mis à jour. `400` si le motif est absent
+(blocage, suspension, annulation) ou si l'identifiant n'est pas un UUID.
+Les champs privés du profil et l'adresse exacte d'un événement ne sont renvoyés qu'au modérateur.
+Chaque mutation verrouille sa cible, vérifie la transition puis écrit l'action d'audit dans la même
+transaction. Une cible égale au modérateur courant ou ayant le rôle `moderator` est refusée avec
+`403 CANNOT_MODERATE_MODERATOR` (y compris l'organisateur d'un événement annulé).
+
+```ts
+type ModerationProfile = {
+  userId: string; email: string; role: 'member' | 'organizer' | 'moderator';
+  accountStatus: 'active' | 'suspended'; status: 'pending' | 'approved' | 'blocked';
+  displayName: string; bio: string | null; lookingFor: string[];
+  interests: Interest[];
+  location: { cityName: string | null; departmentCode: string | null;
+    postalCode: string | null; cityCode: string | null; verified: boolean };
+  discoverable: boolean; allowMessages: boolean; reviewedAt: string | null; createdAt: string;
+};
+type ModerationUser = {
+  id: string; email: string; role: 'member' | 'organizer' | 'moderator';
+  status: 'active' | 'suspended'; profileStatus: 'pending' | 'approved' | 'blocked' | null;
+  displayName: string | null; createdAt: string;
+};
+type ModerationActionEntry = {
+  id: string; moderator: { id: string; email: string };
+  action: string; targetUser: { id: string; email: string } | null;
+  targetEvent: { id: string; title: string } | null; reason: string | null; createdAt: string;
+};
+```
 
 Il n'existe **aucune** route de modération sur les conversations ou les messages.

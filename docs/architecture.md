@@ -55,7 +55,7 @@ api/src/
 ├── profiles/            entités Profile et ProfileInterest (tâche 1)
 ├── events/              entités Event et EventRegistration (tâche 2)
 ├── messaging/           entités Conversation et Message (tâche 3)
-└── moderation/          entité ModerationAction (tâche 4)
+└── moderation/          routes, service transactionnel et entité ModerationAction (tâche 4)
 
 web/src/
 ├── main.ts, App.vue     ossature : lien d'évitement, en-tête, <main>, pied de page

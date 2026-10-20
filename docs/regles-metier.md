@@ -204,6 +204,11 @@ stateDiagram-v2
   (adresse comprise) et le journal d'audit. Jamais les conversations ni les messages.
 - **R-MOD-3** Les actions destructrices (bloquer, suspendre, annuler) exigent une confirmation
   explicite dans l'interface, qui nomme la cible.
+- **R-MOD-4** Réactiver un compte suspendu ne restaure **pas** les inscriptions que la suspension a
+  libérées : les places ont pu être reprises entre-temps. Le membre doit se réinscrire.
+- **R-MOD-5** Ouvert (question à l'équipe) : rétrograder un organisateur (`organizer` → `member`)
+  laisse ses sorties publiées sans personne pour les gérer. Aujourd'hui rien n'est fait ; à trancher :
+  bloquer la rétrogradation tant qu'il a des sorties à venir, ou les annuler automatiquement.
 
 ## 9. Sessions et mots de passe
 
