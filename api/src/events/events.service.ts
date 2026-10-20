@@ -9,6 +9,7 @@ import { EventRegistration, RegistrationStatus } from './event-registration.enti
 import { Event, EventStatus } from './event.entity';
 import { EventFiltersDto } from './event-filters.dto';
 import { EventInputDto, UpdateEventDto } from './event-input.dto';
+import { lockEvent } from './lock-event';
 
 @Injectable()
 export class EventsService {
@@ -40,14 +41,6 @@ export class EventsService {
     if (event.organizerId !== actor.user.id) {
       throw new AppException(HttpStatus.FORBIDDEN, 'NOT_EVENT_OWNER', "Vous ne pouvez pas modifier la sortie d'un autre organisateur.");
     }
-  }
-
-  private async lockedEvent(manager: EntityManager, id: string): Promise<Event> {
-    const event = await manager.findOne(Event, { where: { id }, lock: { mode: 'pessimistic_write' } });
-    if (!event) {
-      throw new AppException(HttpStatus.NOT_FOUND, 'EVENT_NOT_FOUND', "Cette sortie n'est pas disponible.");
-    }
-    return event;
   }
 
   private async validateInterest(manager: EntityManager, interestId: number): Promise<void> {
@@ -241,7 +234,7 @@ export class EventsService {
   async update(actorId: string, id: string, input: UpdateEventDto): Promise<Event> {
     return this.db.transaction(async (manager) => {
       const actor = await this.actor(manager, actorId);
-      const event = await this.lockedEvent(manager, id);
+      const event = await lockEvent(manager, id);
       this.requireOwner(event, actor);
       if (event.status !== EventStatus.Draft && (event.status !== EventStatus.Published || event.startsAt <= new Date())) {
         throw new AppException(HttpStatus.CONFLICT, 'EVENT_NOT_EDITABLE', "Cette sortie ne peut plus être modifiée.");
@@ -280,7 +273,7 @@ export class EventsService {
   async publish(actorId: string, id: string): Promise<Event> {
     return this.db.transaction(async (manager) => {
       const actor = await this.actor(manager, actorId);
-      const event = await this.lockedEvent(manager, id);
+      const event = await lockEvent(manager, id);
       this.requireOwner(event, actor);
       if (event.status !== EventStatus.Draft) {
         throw new AppException(HttpStatus.CONFLICT, 'INVALID_EVENT_TRANSITION', "Cette sortie n'est plus un brouillon.");
@@ -310,7 +303,7 @@ export class EventsService {
     }
     return this.db.transaction(async (manager) => {
       const actor = await this.actor(manager, actorId);
-      const event = await this.lockedEvent(manager, id);
+      const event = await lockEvent(manager, id);
       if (moderatorAction) {
         if (actor.user.role !== UserRole.Moderator) {
           throw new AppException(HttpStatus.FORBIDDEN, 'ROLE_REQUIRED', 'Seul un modérateur peut effectuer cette action.');
@@ -340,7 +333,7 @@ export class EventsService {
   async complete(actorId: string, id: string): Promise<Event> {
     return this.db.transaction(async (manager) => {
       const actor = await this.actor(manager, actorId);
-      const event = await this.lockedEvent(manager, id);
+      const event = await lockEvent(manager, id);
       this.requireOwner(event, actor);
       if (event.status !== EventStatus.Published) {
         throw new AppException(HttpStatus.CONFLICT, 'INVALID_EVENT_TRANSITION', "Cette sortie ne peut pas être clôturée.");
@@ -357,7 +350,7 @@ export class EventsService {
   async remove(actorId: string, id: string): Promise<void> {
     await this.db.transaction(async (manager) => {
       const actor = await this.actor(manager, actorId);
-      const event = await this.lockedEvent(manager, id);
+      const event = await lockEvent(manager, id);
       this.requireOwner(event, actor);
       const registrations = await manager.countBy(EventRegistration, { eventId: id });
       if (event.status !== EventStatus.Draft || registrations > 0) {
