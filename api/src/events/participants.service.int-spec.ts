@@ -109,6 +109,7 @@ describe('Participants et adresse exacte (PostgreSQL)', () => {
 
   it('réserve la liste aux mêmes personnes et masque les comptes indisponibles', async () => {
     const visible = [{ userId: registeredId, displayName: 'Inscrit visible', isOrganizer: false }];
+    expect((await events.detail(organizerId, eventId)).availablePlaces).toBe(4);
     for (const id of [organizerId, registeredId, moderatorId]) {
       expect(await events.participants(id, eventId)).toEqual(visible);
     }
