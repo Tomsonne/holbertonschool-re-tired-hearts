@@ -21,6 +21,7 @@ describe('EventsService (PostgreSQL)', () => {
   let memberId: string;
   let moderatorId: string;
   let interestId: number;
+  let cuisineInterestId: number;
 
   async function user(role: UserRole): Promise<string> {
     const account = await db.manager.save(
@@ -74,6 +75,7 @@ describe('EventsService (PostgreSQL)', () => {
     service = new EventsService(db);
     const interest = await db.manager.findOneByOrFail(Interest, { slug: 'marche' });
     interestId = interest.id;
+    cuisineInterestId = (await db.manager.findOneByOrFail(Interest, { slug: 'cuisine' })).id;
     organizerId = await user(UserRole.Organizer);
     otherOrganizerId = await user(UserRole.Organizer);
     memberId = await user(UserRole.Member);
@@ -138,5 +140,70 @@ describe('EventsService (PostgreSQL)', () => {
     await expect(service.detail(memberId, event.id)).rejects.toMatchObject({
       response: { code: 'EVENT_NOT_FOUND' },
     });
+  });
+
+  it('combine les filtres intérêt et ville, y compris sans code INSEE', async () => {
+    const cuisineLyon = await service.create(organizerId, { ...input(), interestId: cuisineInterestId });
+    const cuisineVilleurbanne = await service.create(organizerId, {
+      ...input(),
+      interestId: cuisineInterestId,
+      location: { cityName: 'Villeurbanne', postalCode: '69100', departmentCode: '69', verified: false },
+    });
+    const marcheLyon = await service.create(organizerId, input());
+    eventIds.push(cuisineLyon.id, cuisineVilleurbanne.id, marcheLyon.id);
+    await service.publish(organizerId, cuisineLyon.id);
+    await service.publish(organizerId, cuisineVilleurbanne.id);
+    await service.publish(organizerId, marcheLyon.id);
+
+    const byInterest = await service.listPublished(memberId, { interestId: cuisineInterestId });
+    expect(byInterest.items.map((event) => event.id)).toEqual(expect.arrayContaining([cuisineLyon.id, cuisineVilleurbanne.id]));
+    const byCity = await service.listPublished(memberId, { cityName: 'lYoN' });
+    expect(byCity.items.map((event) => event.id)).toContain(cuisineLyon.id);
+    expect(byCity.items.map((event) => event.id)).not.toContain(cuisineVilleurbanne.id);
+    const combined = await service.listPublished(memberId, { interestId: cuisineInterestId, cityName: 'Villeurbanne' });
+    expect(combined.total).toBe(1);
+    expect(combined.items[0].id).toBe(cuisineVilleurbanne.id);
+    expect(combined.items[0].location).toEqual({ cityName: 'Villeurbanne', departmentCode: '69' });
+    expect(JSON.stringify(combined)).not.toContain('69100');
+
+    const saintEtienne = await service.create(organizerId, {
+      ...input(),
+      location: { cityName: 'Saint-Étienne', postalCode: '42000', departmentCode: '42', verified: false },
+    });
+    eventIds.push(saintEtienne.id);
+    await service.publish(organizerId, saintEtienne.id);
+    const withoutAccent = await service.listPublished(memberId, { cityName: 'Saint-Etienne' });
+    expect(withoutAccent.items.map((event) => event.id)).toContain(saintEtienne.id);
+  });
+
+  it('pagine uniquement les sorties publiées à venir sans exposer l’adresse', async () => {
+    const cityName = `Ville de test ${randomUUID()}`;
+    const events: Event[] = [];
+    for (let index = 0; index < 15; index += 1) {
+      const event = await service.create(organizerId, {
+        ...input(),
+        location: { cityName, postalCode: '69001', departmentCode: '69', verified: false },
+      });
+      events.push(event);
+      eventIds.push(event.id);
+    }
+    for (const event of events.slice(0, 14)) {
+      await service.publish(organizerId, event.id);
+    }
+    const past = events[0];
+    await db.manager.update(Event, past.id, {
+      startsAt: new Date(Date.now() - 7200000),
+      endsAt: new Date(Date.now() - 3600000),
+    });
+
+    const first = await service.listPublished(memberId, { cityName, page: 1 });
+    const second = await service.listPublished(memberId, { cityName, page: 2 });
+    expect(first).toMatchObject({ page: 1, pageSize: 12, total: 13 });
+    expect(first.items).toHaveLength(12);
+    expect(second.items).toHaveLength(1);
+    const listedIds = [...first.items, ...second.items].map((event) => event.id);
+    expect(listedIds).not.toContain(past.id);
+    expect(listedIds).not.toContain(events[14].id);
+    expect(JSON.stringify({ first, second })).not.toContain('Place des Terreaux');
   });
 });
