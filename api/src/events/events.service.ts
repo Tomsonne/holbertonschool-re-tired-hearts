@@ -104,6 +104,11 @@ export class EventsService {
     return event;
   }
 
+  private canSeePrivateInfo(event: Event, user: User, registration: EventRegistration | null): boolean {
+    return event.organizerId === user.id || user.role === UserRole.Moderator ||
+      registration?.status === RegistrationStatus.Registered;
+  }
+
   async listPublished(actorId: string, filters: EventFiltersDto) {
     await this.actor(this.db.manager, actorId);
     const page = filters.page ?? 1;
@@ -198,7 +203,7 @@ export class EventsService {
     });
     const myRegistration = await this.db.manager.findOneBy(EventRegistration, { eventId: id, userId: actorId });
     const isOrganizer = event.organizerId === actorId;
-    const canSeeAddress = isOrganizer || actor.user.role === UserRole.Moderator || myRegistration?.status === RegistrationStatus.Registered;
+    const canSeeAddress = this.canSeePrivateInfo(event, actor.user, myRegistration);
     const availablePlaces = Math.max(0, event.capacity - registeredCount);
     const isFuture = event.startsAt > new Date();
     const canRegister = actor.profile.status === ProfileStatus.Approved &&
@@ -235,6 +240,33 @@ export class EventsService {
                 myRegistration?.status === RegistrationStatus.Registered ? 'Vous êtes déjà inscrit.' : null),
       isOrganizer,
     };
+  }
+
+  async participants(actorId: string, id: string) {
+    const event = await this.findVisible(actorId, id);
+    const actor = await this.actor(this.db.manager, actorId);
+    const registration = await this.db.manager.findOneBy(EventRegistration, { eventId: id, userId: actorId });
+    if (!this.canSeePrivateInfo(event, actor.user, registration)) {
+      throw new AppException(HttpStatus.FORBIDDEN, 'FORBIDDEN', "L'accès à la liste des participants n'est pas autorisé.");
+    }
+
+    const rows = await this.db.manager.createQueryBuilder(EventRegistration, 'registration')
+      .innerJoin(User, 'participant', 'participant.id = registration.user_id')
+      .innerJoin(Profile, 'profile', 'profile.user_id = participant.id')
+      .select('participant.id', 'userId')
+      .addSelect('profile.display_name', 'displayName')
+      .where('registration.event_id = :eventId', { eventId: id })
+      .andWhere('registration.status = :registered', { registered: RegistrationStatus.Registered })
+      .andWhere('participant.status = :active', { active: AccountStatus.Active })
+      .andWhere('profile.status = :approved', { approved: ProfileStatus.Approved })
+      .orderBy('profile.display_name', 'ASC')
+      .addOrderBy('participant.id', 'ASC')
+      .getRawMany<{ userId: string; displayName: string }>();
+    return rows.map(({ userId, displayName }) => ({
+      userId,
+      displayName,
+      isOrganizer: userId === event.organizerId,
+    }));
   }
 
   async update(actorId: string, id: string, input: UpdateEventDto): Promise<Event> {
