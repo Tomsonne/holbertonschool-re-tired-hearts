@@ -356,7 +356,7 @@ describe('Issue #11 — autorisation des comptes et des profils (bout en bout)',
       }
     });
 
-    it('seul un membre approuvé découvre : pending et blocked → 403, suspendu → refusé', async () => {
+    it('seul un membre approuvé découvre : pending et blocked → 403, suspendu → 403', async () => {
       const pending = await seed({ profileStatus: ProfileStatus.Pending });
       const blocked = await seed({ profileStatus: ProfileStatus.Blocked });
       const suspended = await seed({ accountStatus: AccountStatus.Suspended });
@@ -370,8 +370,35 @@ describe('Issue #11 — autorisation des comptes et des profils (bout en bout)',
       expect(blockedResponse.body.code).toBe('PROFILE_BLOCKED');
 
       const suspendedResponse = await http().get('/api/profiles').set('Cookie', suspended.cookie);
-      expect(suspendedResponse.status).toBe(401);
-      expect(suspendedResponse.body.code).toBe('SESSION_EXPIRED');
+      expect(suspendedResponse.status).toBe(403);
+      expect(suspendedResponse.body.code).toBe('ACCOUNT_SUSPENDED');
+    });
+  });
+
+  describe('statut pending ou blocked du profil appliqué à toute l’API', () => {
+    it('pending garde les accès actifs documentés mais pas les accès réservés aux profils approuvés', async () => {
+      const pending = await seed({ profileStatus: ProfileStatus.Pending });
+
+      expect((await http().get('/api/me').set('Cookie', pending.cookie)).status).toBe(200);
+      expect((await http().get('/api/events').set('Cookie', pending.cookie)).status).toBe(200);
+      const discovery = await http().get('/api/profiles').set('Cookie', pending.cookie);
+      expect(discovery.status).toBe(403);
+      expect(discovery.body.code).toBe('PROFILE_NOT_APPROVED');
+    });
+
+    it('blocked ne peut accéder qu’à son compte et lire son propre profil', async () => {
+      const blocked = await seed({ profileStatus: ProfileStatus.Blocked });
+
+      expect((await http().get('/api/me').set('Cookie', blocked.cookie)).status).toBe(200);
+      expect((await http().get('/api/me/profile').set('Cookie', blocked.cookie)).status).toBe(200);
+      for (const path of ['/api/events', '/api/moderation/users']) {
+        const response = await http().get(path).set('Cookie', blocked.cookie);
+        expect(response.status).toBe(403);
+        expect(response.body.code).toBe('PROFILE_BLOCKED');
+      }
+      const write = await http().put('/api/me/profile').set('Cookie', blocked.cookie).send(validProfile);
+      expect(write.status).toBe(403);
+      expect(write.body.code).toBe('PROFILE_BLOCKED');
     });
   });
 
@@ -380,14 +407,45 @@ describe('Issue #11 — autorisation des comptes et des profils (bout en bout)',
       const suspended = await seed({ accountStatus: AccountStatus.Suspended });
       expect((await http().get('/api/me').set('Cookie', suspended.cookie)).status).toBe(200);
       expect((await http().post('/api/auth/logout').set('Cookie', suspended.cookie)).status).toBe(204);
-      for (const path of ['/api/me/profile', '/api/profiles']) {
+      for (const path of ['/api/me/profile', '/api/profiles', '/api/events', '/api/moderation/users']) {
         const response = await http().get(path).set('Cookie', suspended.cookie);
-        expect(response.status).toBe(401);
-        expect(response.body.code).toBe('SESSION_EXPIRED');
+        expect(response.status).toBe(403);
+        expect(response.body.code).toBe('ACCOUNT_SUSPENDED');
       }
       const write = await http().put('/api/me/profile').set('Cookie', suspended.cookie).send(validProfile);
-      expect(write.status).toBe(401);
-      expect(write.body.code).toBe('SESSION_EXPIRED');
+      expect(write.status).toBe(403);
+      expect(write.body.code).toBe('ACCOUNT_SUSPENDED');
+    });
+
+    it('applique une suspension en base à la requête suivante malgré un jeton déjà émis', async () => {
+      const member = await seed();
+      await db.getRepository(User).update(
+        { id: member.id },
+        { status: AccountStatus.Suspended, suspendedAt: new Date(), sessionVersion: 1 },
+      );
+
+      const me = await http().get('/api/me').set('Cookie', member.cookie);
+      expect(me.status).toBe(200);
+      const events = await http().get('/api/events').set('Cookie', member.cookie);
+      expect(events.status).toBe(403);
+      expect(events.body.code).toBe('ACCOUNT_SUSPENDED');
+    });
+
+    it.each([
+      ['GET', '/api/me/'],
+      ['GET', '/api/Me'],
+      ['GET', '/api/me/x'],
+      ['POST', '/api/me'],
+      ['GET', '/api/auth/logout'],
+      ['POST', '/api/auth/logout/'],
+    ])('ne laisse pas une variante de route contourner la liste blanche : %s %s', async (method, path) => {
+      const suspended = await seed({ accountStatus: AccountStatus.Suspended });
+      const response = await http()[method.toLowerCase() as 'get' | 'post'](path).set('Cookie', suspended.cookie);
+      expect([200, 204]).not.toContain(response.status);
+      expect([403, 404]).toContain(response.status);
+      if (response.status === 403) {
+        expect(response.body.code).toBe('ACCOUNT_SUSPENDED');
+      }
     });
   });
 });

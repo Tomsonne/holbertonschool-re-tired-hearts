@@ -10,6 +10,7 @@ describe('AccessGuard', () => {
   const profiles = { findOneBy: jest.fn() };
   let guard: AccessGuard;
   let user: User;
+  let request: { method: string; path: string };
   let accessLevel: string | undefined;
   let roles: UserRole[];
   const handler = () => undefined;
@@ -19,12 +20,13 @@ describe('AccessGuard', () => {
     ({
       getHandler: () => handler,
       getClass: () => TestController,
-      switchToHttp: () => ({ getRequest: () => ({ user }) }),
+      switchToHttp: () => ({ getRequest: () => ({ user, ...request }) }),
     }) as unknown as ExecutionContext;
 
   beforeEach(() => {
     jest.clearAllMocks();
     user = Object.assign(new User(), { id: 'user-id', status: AccountStatus.Active, role: UserRole.Member });
+    request = { method: 'GET', path: '/api/me' };
     accessLevel = undefined;
     roles = [];
     guard = new AccessGuard(reflector, profiles as unknown as Repository<Profile>);
@@ -43,21 +45,6 @@ describe('AccessGuard', () => {
     expect(profiles.findOneBy).not.toHaveBeenCalled();
   });
 
-  it('refuse un compte suspendu sur un accès actif', async () => {
-    user.status = AccountStatus.Suspended;
-
-    await expect(guard.canActivate(context())).rejects.toMatchObject({
-      response: { code: 'ACCOUNT_SUSPENDED' },
-    });
-  });
-
-  it('laisse passer un compte suspendu sur le niveau session', async () => {
-    user.status = AccountStatus.Suspended;
-    accessLevel = 'session';
-
-    await expect(guard.canActivate(context())).resolves.toBe(true);
-  });
-
   it('exige un profil approuvé pour l’accès approuvé', async () => {
     accessLevel = 'approved';
     profiles.findOneBy.mockResolvedValue(Object.assign(new Profile(), { status: ProfileStatus.Pending }));
@@ -69,11 +56,31 @@ describe('AccessGuard', () => {
 
   it('signale séparément un profil bloqué', async () => {
     accessLevel = 'approved';
+    request = { method: 'GET', path: '/api/profiles' };
     profiles.findOneBy.mockResolvedValue(Object.assign(new Profile(), { status: ProfileStatus.Blocked }));
 
     await expect(guard.canActivate(context())).rejects.toMatchObject({
       response: { code: 'PROFILE_BLOCKED' },
     });
+  });
+
+  it('refuse globalement les routes protégées d’un profil bloqué', async () => {
+    accessLevel = 'active';
+    request = { method: 'GET', path: '/api/events' };
+    profiles.findOneBy.mockResolvedValue(Object.assign(new Profile(), { status: ProfileStatus.Blocked }));
+
+    await expect(guard.canActivate(context())).rejects.toMatchObject({
+      response: { code: 'PROFILE_BLOCKED' },
+    });
+  });
+
+  it('laisse consulter son compte et son profil bloqué en lecture seule', async () => {
+    profiles.findOneBy.mockResolvedValue(Object.assign(new Profile(), { status: ProfileStatus.Blocked }));
+
+    await expect(guard.canActivate(context())).resolves.toBe(true);
+
+    request = { method: 'GET', path: '/api/me/profile' };
+    await expect(guard.canActivate(context())).resolves.toBe(true);
   });
 
   it('vérifie le rôle après les statuts de compte et de profil', async () => {
@@ -82,7 +89,7 @@ describe('AccessGuard', () => {
     await expect(guard.canActivate(context())).rejects.toMatchObject({
       response: { code: 'ROLE_REQUIRED' },
     });
-    expect(profiles.findOneBy).not.toHaveBeenCalled();
+    expect(profiles.findOneBy).toHaveBeenCalledWith({ userId: user.id });
   });
 
   it('applique les rôles déclarés par @Roles', async () => {

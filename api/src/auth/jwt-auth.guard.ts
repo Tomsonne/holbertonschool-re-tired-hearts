@@ -1,18 +1,18 @@
 import { CanActivate, ExecutionContext, HttpStatus, Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Request } from 'express';
 import { Repository } from 'typeorm';
 import { AppException } from '../common/app.exception';
-import { User } from '../users/user.entity';
-import { ACCESS_LEVEL_KEY, AccessLevel, IS_PUBLIC_KEY } from './auth.decorators';
+import { AccountStatus, User } from '../users/user.entity';
+import { IS_PUBLIC_KEY } from './auth.decorators';
 import { SessionTokenPayload } from './auth.service';
-import { JwtService } from '@nestjs/jwt';
-import { AccountStatus } from '../users/user.entity';
 
 export type AuthenticatedRequest = Request & { user?: User };
 
 const SESSION_COOKIE = 'rth_session';
+const SUSPENDED_ALLOWED_ROUTES = new Set(['GET /api/me', 'POST /api/auth/logout']);
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -62,14 +62,13 @@ export class JwtAuthGuard implements CanActivate {
       throw this.sessionExpired();
     }
 
-    const access =
-      this.reflector.getAllAndOverride<AccessLevel>(ACCESS_LEVEL_KEY, [
-        context.getHandler(),
-        context.getClass(),
-      ]) ?? 'active';
     const versionMismatch = user.sessionVersion !== payload.sessionVersion;
     const suspendedSessionAccess =
-      user.status === AccountStatus.Suspended && access === 'session';
+      user.status === AccountStatus.Suspended &&
+      SUSPENDED_ALLOWED_ROUTES.has(`${request.method} ${request.path}`);
+    if (user.status === AccountStatus.Suspended && !suspendedSessionAccess) {
+      throw this.accountSuspended();
+    }
     if (versionMismatch && !suspendedSessionAccess) {
       throw this.sessionExpired();
     }
@@ -107,6 +106,14 @@ export class JwtAuthGuard implements CanActivate {
       HttpStatus.UNAUTHORIZED,
       'SESSION_EXPIRED',
       'Votre session a expiré, merci de vous reconnecter.',
+    );
+  }
+
+  private accountSuspended(): AppException {
+    return new AppException(
+      HttpStatus.FORBIDDEN,
+      'ACCOUNT_SUSPENDED',
+      'Ce compte est suspendu.',
     );
   }
 }

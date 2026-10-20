@@ -12,6 +12,8 @@ import { AuthenticatedRequest, JwtAuthGuard } from '../../src/auth/jwt-auth.guar
 import { Profile, ProfileStatus } from '../../src/profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../../src/users/user.entity';
 
+type TestRequest = Omit<AuthenticatedRequest, 'path'> & { path: string };
+
 describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
   const handler = () => undefined;
   class ProtectedController {}
@@ -29,11 +31,11 @@ describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
     const users = { findOneBy: jest.fn() };
     let reflector: Reflector;
     let guard: JwtAuthGuard;
-    let request: AuthenticatedRequest;
+    let request: TestRequest;
 
     beforeEach(() => {
       jest.clearAllMocks();
-      request = { cookies: {} } as unknown as AuthenticatedRequest;
+      request = { cookies: {}, method: 'GET', path: '/api/me' } as unknown as TestRequest;
       reflector = new Reflector();
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
       guard = new JwtAuthGuard(
@@ -72,8 +74,10 @@ describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
       expect(users.findOneBy).toHaveBeenCalledWith({ id: 'account-id' });
     });
 
-    it('accepte une session dont la version a changé uniquement sur un accès session d’un compte suspendu', async () => {
+    it('accepte un compte suspendu sur GET /api/me malgré la révocation de session', async () => {
       request.cookies = { rth_session: 'signed-token' };
+      request.method = 'GET';
+      request.path = '/api/me';
       jwtService.verifyAsync.mockResolvedValue({
         sub: 'account-id',
         sessionVersion: 7,
@@ -87,10 +91,6 @@ describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
           status: AccountStatus.Suspended,
         }),
       );
-      jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key: unknown) =>
-        key === ACCESS_LEVEL_KEY ? 'session' : false,
-      );
-
       await expect(guard.canActivate(makeContext(request))).resolves.toBe(true);
       expect(request.user).toMatchObject({
         id: 'account-id',
@@ -98,8 +98,9 @@ describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
       });
     });
 
-    it('refuse le même jeton suspendu si la route ne porte pas le niveau session', async () => {
+    it('refuse le même jeton suspendu hors des chemins explicitement autorisés', async () => {
       request.cookies = { rth_session: 'signed-token' };
+      request.path = '/api/profiles';
       jwtService.verifyAsync.mockResolvedValue({
         sub: 'account-id',
         sessionVersion: 7,
@@ -115,7 +116,7 @@ describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
       );
 
       await expect(guard.canActivate(makeContext(request))).rejects.toMatchObject({
-        response: { statusCode: 401, code: 'SESSION_EXPIRED' },
+        response: { statusCode: 403, code: 'ACCOUNT_SUSPENDED' },
       });
     });
 
@@ -141,7 +142,7 @@ describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
     const profiles = { findOneBy: jest.fn() };
     const reflector = new Reflector();
     let guard: AccessGuard;
-    let request: AuthenticatedRequest;
+    let request: TestRequest;
     let level: AccessLevel;
     let requiredRoles: UserRole[];
 
@@ -153,7 +154,9 @@ describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
           role: UserRole.Member,
           status: AccountStatus.Active,
         }),
-      } as AuthenticatedRequest;
+        method: 'GET',
+        path: '/api/me',
+      } as TestRequest;
       level = 'active';
       requiredRoles = [];
       jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key: unknown) => {
@@ -165,29 +168,12 @@ describe('Issue #3 — gardes et décorateurs d’autorisation', () => {
       guard = new AccessGuard(reflector, profiles as unknown as Repository<Profile>);
     });
 
-    it('refuse un compte suspendu avant de vérifier le profil ou le rôle', async () => {
-      request.user!.status = AccountStatus.Suspended;
-      level = 'moderator';
-
-      await expect(guard.canActivate(makeContext(request))).rejects.toMatchObject({
-        response: { statusCode: 403, code: 'ACCOUNT_SUSPENDED' },
-      });
-      expect(profiles.findOneBy).not.toHaveBeenCalled();
-    });
-
-    it('autorise un compte suspendu uniquement sur le niveau session', async () => {
-      request.user!.status = AccountStatus.Suspended;
-      level = 'session';
-
-      await expect(guard.canActivate(makeContext(request))).resolves.toBe(true);
-      expect(profiles.findOneBy).not.toHaveBeenCalled();
-    });
-
     it.each([
       [ProfileStatus.Pending, 'PROFILE_NOT_APPROVED'],
       [ProfileStatus.Blocked, 'PROFILE_BLOCKED'],
     ])('refuse un profil %s avant le contrôle du rôle', async (status, code) => {
       level = 'approved';
+      request.path = '/api/profiles';
       requiredRoles = [UserRole.Moderator];
       profiles.findOneBy.mockResolvedValue(Object.assign(new Profile(), { status }));
 
