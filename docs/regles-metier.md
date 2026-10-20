@@ -43,17 +43,26 @@ Deux statuts indépendants : `users.status` (`active` par défaut, ou `suspended
 | actif + `blocked` | ✅ | ✅ | ❌ (lecture seule) | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `suspended` | ❌ `403 ACCOUNT_SUSPENDED` | ✅ compte et déconnexion via session existante | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-- **R-STATUS-1** La suspension incrémente `session_version`. Les sessions déjà ouvertes restent
-  utilisables uniquement pour `GET /api/me` et `POST /api/auth/logout`; toute autre route protégée
-  est refusée. Une nouvelle connexion au compte suspendu répond `403 ACCOUNT_SUSPENDED`.
+- **R-STATUS-1** La suspension incrémente `session_version`. Après authentification, le garde global
+  relit le compte en base à chaque requête : les sessions déjà ouvertes restent utilisables
+  uniquement pour `GET /api/me` et `POST /api/auth/logout` (méthode et chemin exacts); toute autre
+  route protégée répond `403 ACCOUNT_SUSPENDED`. Une nouvelle connexion au compte suspendu répond
+  également `403 ACCOUNT_SUSPENDED`.
 - **R-STATUS-2** Un profil bloqué est invisible partout (découverte, fiche profil, liste de
-  participants, conversations des autres affichent « Membre indisponible »). Le membre garde l'accès
-  à son compte et peut se déconnecter.
+  participants, conversations des autres affichent « Membre indisponible »). Le garde global refuse
+  également toute autre route protégée avec `403 PROFILE_BLOCKED`. Le membre garde l'accès à
+  `GET /api/me`, à la lecture de son propre profil (`GET /api/me/profile`) et peut se déconnecter ;
+  son profil reste en lecture seule.
 - **R-STATUS-3** Les statuts ne changent **que** par une route de modération (ou par le seed). Aucune
   route membre n'accepte un champ `status`.
 - **R-STATUS-4** Bloquer un profil ou suspendre un compte retire automatiquement ses inscriptions
   aux sorties à venir et libère les places. Suspendre un organisateur n'annule pas ses événements :
   le modérateur les annule explicitement pour que chaque décision soit tracée.
+- **R-STATUS-5** `pending` et `blocked` sont des statuts de **profil**, pas de compte. Un profil
+  `pending` peut consulter les événements et modifier son profil, mais ne peut accéder aux fonctions
+  réservées aux profils approuvés (découverte, inscription et création d'événement). Un profil
+  `blocked` conserve uniquement la lecture de son compte et de son profil et la déconnexion.
+  `users.status` ne comporte que `active` et `suspended`.
 
 ## 3. Profil et confidentialité
 

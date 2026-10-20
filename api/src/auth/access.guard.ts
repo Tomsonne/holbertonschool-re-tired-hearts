@@ -4,9 +4,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppException } from '../common/app.exception';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
-import { AccountStatus, User, UserRole } from '../users/user.entity';
+import { User, UserRole } from '../users/user.entity';
 import { ACCESS_LEVEL_KEY, IS_PUBLIC_KEY, ROLES_KEY, AccessLevel } from './auth.decorators';
 import { AuthenticatedRequest } from './jwt-auth.guard';
+
+const PROFILE_BLOCK_READ_ROUTES = new Set([
+  'GET /api/me',
+  'GET /api/me/profile',
+  'POST /api/auth/logout',
+]);
 
 @Injectable()
 export class AccessGuard implements CanActivate {
@@ -32,24 +38,17 @@ export class AccessGuard implements CanActivate {
     }
 
     const access = this.reflector.getAllAndOverride<AccessLevel>(ACCESS_LEVEL_KEY, metadataTargets) ?? 'active';
-    if (access !== 'session' && user.status === AccountStatus.Suspended) {
+    const profile = await this.profiles.findOneBy({ userId: user.id });
+    const profileReadAllowed = PROFILE_BLOCK_READ_ROUTES.has(`${request.method} ${request.path}`);
+    if (profile?.status === ProfileStatus.Blocked && !profileReadAllowed) {
       throw new ForbiddenException({
         statusCode: 403,
-        code: 'ACCOUNT_SUSPENDED',
-        message: 'Ce compte est suspendu.',
+        code: 'PROFILE_BLOCKED',
+        message: 'Ce profil ne peut pas accéder à cette fonctionnalité.',
       });
     }
 
-    let profile: Profile | null = null;
     if (access === 'approved' || access === 'organizer') {
-      profile = await this.profiles.findOneBy({ userId: user.id });
-      if (profile?.status === ProfileStatus.Blocked) {
-        throw new ForbiddenException({
-          statusCode: 403,
-          code: 'PROFILE_BLOCKED',
-          message: 'Ce profil ne peut pas accéder à cette fonctionnalité.',
-        });
-      }
       if (profile?.status !== ProfileStatus.Approved) {
         throw new ForbiddenException({
           statusCode: 403,

@@ -12,7 +12,7 @@
 | Niveau | Signification |
 |---|---|
 | **public** | Aucune session nécessaire |
-| **session** | Jeton non expiré ; compte suspendu admis uniquement sur `GET /me` et `POST /auth/logout` |
+| **session** | Jeton non expiré ; compte suspendu admis uniquement sur `GET /api/me` et `POST /api/auth/logout` |
 | **actif** | Session valide + compte `active` (le profil peut être en attente) |
 | **approuvé** | **actif** + profil `approved` |
 | **organisateur** | **approuvé** + rôle `organizer` |
@@ -21,10 +21,16 @@
 Ordre de vérification : authentification → statut du compte → statut du profil → rôle → propriété de
 la ressource (dans le service).
 
-La suspension incrémente `session_version`. Un jeton déjà émis reste admis uniquement pour
-`GET /api/me` et `POST /api/auth/logout`; il est rejeté sur toute autre route protégée. Une
-connexion ultérieure au compte suspendu répond `403 ACCOUNT_SUSPENDED`. Après réactivation,
-l'ancienne version du jeton est rejetée.
+La suspension incrémente `session_version`. Le statut du compte est relu en base à chaque requête :
+un jeton déjà émis reste admis uniquement pour `GET /api/me` et `POST /api/auth/logout` (méthode et
+chemin exacts); toute autre route protégée répond `403 ACCOUNT_SUSPENDED`. Une connexion ultérieure
+au compte suspendu répond aussi `403 ACCOUNT_SUSPENDED`. Après réactivation, l'ancienne version du
+jeton est rejetée.
+
+`pending` et `blocked` sont des statuts de profil. Un profil en attente peut modifier son propre
+profil et consulter les événements, mais les routes qui exigent un profil approuvé répondent
+`403 PROFILE_NOT_APPROVED`. Un profil bloqué peut lire `GET /api/me` et `GET /api/me/profile`,
+ainsi que se déconnecter ; toute autre route protégée répond `403 PROFILE_BLOCKED`.
 
 ## Format d'erreur
 

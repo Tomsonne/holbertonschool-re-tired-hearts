@@ -1,7 +1,7 @@
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Repository } from 'typeorm';
-import { User } from '../users/user.entity';
+import { AccountStatus, User } from '../users/user.entity';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
@@ -9,7 +9,7 @@ describe('JwtAuthGuard', () => {
   const jwtService = { verifyAsync: jest.fn() };
   const users = { findOneBy: jest.fn() };
   let guard: JwtAuthGuard;
-  let request: { cookies: Record<string, string>; user?: User };
+  let request: { cookies: Record<string, string>; method: string; path: string; user?: User };
   const handler = () => undefined;
   class TestController {}
 
@@ -22,7 +22,7 @@ describe('JwtAuthGuard', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    request = { cookies: {} };
+    request = { cookies: {}, method: 'GET', path: '/api/me' };
     guard = new JwtAuthGuard(
       reflector,
       jwtService as never,
@@ -71,6 +71,7 @@ describe('JwtAuthGuard', () => {
 
   it('révoque le jeton si session_version a changé', async () => {
     request.cookies.rth_session = 'stale';
+    request.path = '/api/me/profile';
     jwtService.verifyAsync.mockResolvedValue({
       sub: 'user-id',
       sessionVersion: 3,
@@ -81,6 +82,67 @@ describe('JwtAuthGuard', () => {
 
     await expect(guard.canActivate(context())).rejects.toMatchObject({
       response: { code: 'SESSION_EXPIRED' },
+    });
+  });
+
+  it('ne contourne pas la révocation d’un compte actif sur une route de session', async () => {
+    request.cookies.rth_session = 'stale';
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'user-id',
+      sessionVersion: 0,
+      iat: 100,
+      exp: 200,
+    });
+    users.findOneBy.mockResolvedValue(
+      Object.assign(new User(), { id: 'user-id', status: AccountStatus.Active, sessionVersion: 1 }),
+    );
+
+    await expect(guard.canActivate(context())).rejects.toMatchObject({
+      response: { statusCode: 401, code: 'SESSION_EXPIRED' },
+    });
+  });
+
+  it.each([
+    ['GET', '/api/me'],
+    ['POST', '/api/auth/logout'],
+  ])('autorise un compte suspendu sur %s %s malgré l’incrément de session', async (method, path) => {
+    request.cookies.rth_session = 'valid';
+    request.method = method;
+    request.path = path;
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'user-id',
+      sessionVersion: 0,
+      iat: 100,
+      exp: 200,
+    });
+    users.findOneBy.mockResolvedValue(
+      Object.assign(new User(), { id: 'user-id', status: AccountStatus.Suspended, sessionVersion: 1 }),
+    );
+
+    await expect(guard.canActivate(context())).resolves.toBe(true);
+  });
+
+  it.each([
+    ['GET', '/api/events'],
+    ['GET', '/api/me/'],
+    ['GET', '/api/Me'],
+    ['POST', '/api/auth/logout/'],
+  ])('refuse un compte suspendu sur %s %s', async (method, path) => {
+    request.cookies.rth_session = 'valid';
+    request.method = method;
+    request.path = path;
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 'user-id',
+      sessionVersion: 0,
+      iat: 100,
+      exp: 200,
+    });
+    users.findOneBy.mockResolvedValue(
+      Object.assign(new User(), { id: 'user-id', status: AccountStatus.Suspended, sessionVersion: 1 }),
+    );
+
+    await expect(guard.canActivate(context())).rejects.toMatchObject({
+      response: { statusCode: 403, code: 'ACCOUNT_SUSPENDED' },
     });
   });
 
