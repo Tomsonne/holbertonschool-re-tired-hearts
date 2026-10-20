@@ -10,6 +10,7 @@ import { Interest } from '../../src/interests/interest.entity';
 import { ProfileInterest } from '../../src/profiles/profile-interest.entity';
 import { Profile, ProfileStatus } from '../../src/profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../../src/users/user.entity';
+import { assertTestDatabase } from './assert-test-database';
 
 // Tests bout en bout de l'issue #11 : vraie application NestJS, vraie base PostgreSQL migrée.
 // Ils nécessitent DATABASE_HOST/PORT/USER/PASSWORD/NAME et vident la table users : à ne lancer
@@ -25,6 +26,7 @@ describe('Issue #11 — autorisation des comptes et des profils (bout en bout)',
   let sequence = 0;
 
   beforeAll(async () => {
+    assertTestDatabase(process.env);
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET ??= 'e2e-secret-e2e-secret-e2e-secret-e2e-secret';
     db = new DataSource(buildDataSourceOptions(process.env));
@@ -191,7 +193,7 @@ describe('Issue #11 — autorisation des comptes et des profils (bout en bout)',
       const bob = await seed({ displayName: 'Bob' });
       for (const method of ['put', 'patch', 'delete'] as const) {
         const response = await http()[method](`/api/profiles/${bob.id}`).set('Cookie', alice.cookie).send(validProfile);
-        expect([404, 405]).toContain(response.status);
+        expect(response.status).toBe(404);
       }
       expect((await db.getRepository(Profile).findOneByOrFail({ userId: bob.id })).displayName).toBe('Bob');
     });
@@ -367,7 +369,9 @@ describe('Issue #11 — autorisation des comptes et des profils (bout en bout)',
       expect(blockedResponse.status).toBe(403);
       expect(blockedResponse.body.code).toBe('PROFILE_BLOCKED');
 
-      expect([401, 403]).toContain((await http().get('/api/profiles').set('Cookie', suspended.cookie)).status);
+      const suspendedResponse = await http().get('/api/profiles').set('Cookie', suspended.cookie);
+      expect(suspendedResponse.status).toBe(401);
+      expect(suspendedResponse.body.code).toBe('SESSION_EXPIRED');
     });
   });
 
@@ -378,10 +382,12 @@ describe('Issue #11 — autorisation des comptes et des profils (bout en bout)',
       expect((await http().post('/api/auth/logout').set('Cookie', suspended.cookie)).status).toBe(204);
       for (const path of ['/api/me/profile', '/api/profiles']) {
         const response = await http().get(path).set('Cookie', suspended.cookie);
-        expect([401, 403]).toContain(response.status);
+        expect(response.status).toBe(401);
+        expect(response.body.code).toBe('SESSION_EXPIRED');
       }
       const write = await http().put('/api/me/profile').set('Cookie', suspended.cookie).send(validProfile);
-      expect([401, 403]).toContain(write.status);
+      expect(write.status).toBe(401);
+      expect(write.body.code).toBe('SESSION_EXPIRED');
     });
   });
 });
