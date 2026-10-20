@@ -11,6 +11,7 @@ import { Interest } from '../../src/interests/interest.entity';
 import { ProfileInterest } from '../../src/profiles/profile-interest.entity';
 import { Profile, ProfileStatus } from '../../src/profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../../src/users/user.entity';
+import { assertTestDatabase } from './assert-test-database';
 
 // Tests bout en bout de l'issue #23 : vraie application, vraie base PostgreSQL migrée.
 // Comme authorization.e2e-spec.ts, ils vident la table users : base jetable uniquement.
@@ -24,6 +25,7 @@ describe('Issue #23 — modération et journal d’audit (bout en bout)', () => 
   let sequence = 0;
 
   beforeAll(async () => {
+    assertTestDatabase(process.env);
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET ??= 'e2e-secret-e2e-secret-e2e-secret-e2e-secret';
     db = new DataSource(buildDataSourceOptions(process.env));
@@ -412,7 +414,7 @@ describe('Issue #23 — modération et journal d’audit (bout en bout)', () => 
         '/api/moderation/messages',
       ]) {
         const response = await http().get(path).set('Cookie', mod.cookie);
-        expect([403, 404]).toContain(response.status);
+        expect(response.status).toBe(404);
       }
     });
 
