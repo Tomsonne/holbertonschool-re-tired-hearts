@@ -1,0 +1,142 @@
+import { randomUUID } from 'crypto';
+import { config } from 'dotenv';
+import { DataSource } from 'typeorm';
+import { buildDataSourceOptions } from '../database/typeorm.config';
+import { Interest } from '../interests/interest.entity';
+import { ModerationAction } from '../moderation/moderation-action.entity';
+import { Profile, ProfileStatus } from '../profiles/profile.entity';
+import { AccountStatus, User, UserRole } from '../users/user.entity';
+import { Event, EventStatus } from './event.entity';
+import { EventInputDto } from './event-input.dto';
+import { EventsService } from './events.service';
+
+// Utilise uniquement la base *_test ; la base de démonstration n'est jamais modifiée.
+describe('EventsService (PostgreSQL)', () => {
+  let db: DataSource;
+  let service: EventsService;
+  const userIds: string[] = [];
+  const eventIds: string[] = [];
+  let organizerId: string;
+  let otherOrganizerId: string;
+  let memberId: string;
+  let moderatorId: string;
+  let interestId: number;
+
+  async function user(role: UserRole): Promise<string> {
+    const account = await db.manager.save(
+      db.manager.create(User, {
+        email: `${randomUUID()}@example.test`,
+        passwordHash: 'integration-test-only',
+        role,
+        status: AccountStatus.Active,
+      }),
+    );
+    userIds.push(account.id);
+    await db.manager.save(
+      db.manager.create(Profile, {
+        userId: account.id,
+        displayName: 'Profil de test',
+        cityName: 'Lyon',
+        departmentCode: '69',
+        status: ProfileStatus.Approved,
+      }),
+    );
+    return account.id;
+  }
+
+  function input(): EventInputDto {
+    const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const endsAt = new Date(startsAt.getTime() + 2 * 60 * 60 * 1000);
+    return {
+      title: 'Promenade de quartier',
+      description: 'Une promenade conviviale de deux heures dans le quartier.',
+      interestId,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      location: {
+        cityName: 'Lyon',
+        postalCode: '69001',
+        departmentCode: '69',
+        verified: false,
+      },
+      exactAddress: 'Place des Terreaux, Lyon',
+      capacity: 5,
+    };
+  }
+
+  beforeAll(async () => {
+    config({ path: ['.env', '../.env'] });
+    db = new DataSource(
+      buildDataSourceOptions({ ...process.env, DATABASE_NAME: 're_tired_hearts_test' }),
+    );
+    await db.initialize();
+    await db.runMigrations();
+    service = new EventsService(db);
+    const interest = await db.manager.findOneByOrFail(Interest, { slug: 'marche' });
+    interestId = interest.id;
+    organizerId = await user(UserRole.Organizer);
+    otherOrganizerId = await user(UserRole.Organizer);
+    memberId = await user(UserRole.Member);
+    moderatorId = await user(UserRole.Moderator);
+  });
+
+  afterAll(async () => {
+    if (!db?.isInitialized) return;
+    for (const id of eventIds) {
+      await db.manager.delete(ModerationAction, { targetEventId: id });
+      await db.manager.delete(Event, { id });
+    }
+    for (const id of userIds) {
+      await db.manager.delete(Profile, { userId: id });
+      await db.manager.delete(User, { id });
+    }
+    await db.destroy();
+  });
+
+  it('crée un brouillon pour un organisateur approuvé et refuse un membre', async () => {
+    const event = await service.create(organizerId, input());
+    eventIds.push(event.id);
+    expect(event.status).toBe(EventStatus.Draft);
+    await expect(service.create(memberId, input())).rejects.toMatchObject({
+      response: { code: 'ROLE_REQUIRED' },
+    });
+    await expect(service.findVisible(memberId, event.id)).rejects.toMatchObject({
+      response: { code: 'EVENT_NOT_FOUND' },
+    });
+  });
+
+  it("refuse qu'un autre organisateur modifie ou publie le brouillon", async () => {
+    const event = await service.create(organizerId, input());
+    eventIds.push(event.id);
+    await expect(service.update(otherOrganizerId, event.id, { title: 'Autre titre' })).rejects.toMatchObject({
+      response: { code: 'NOT_EVENT_OWNER' },
+    });
+    await expect(service.publish(otherOrganizerId, event.id)).rejects.toMatchObject({
+      response: { code: 'NOT_EVENT_OWNER' },
+    });
+  });
+
+  it('publie, puis annule avec un audit quand le modérateur agit', async () => {
+    const event = await service.create(organizerId, input());
+    eventIds.push(event.id);
+    expect((await service.publish(organizerId, event.id)).status).toBe(EventStatus.Published);
+    const memberView = await service.detail(memberId, event.id);
+    expect(memberView.exactAddress).toBeNull();
+    expect(memberView.location).toEqual({ cityName: 'Lyon', departmentCode: '69' });
+    expect(memberView.canRegister).toBe(true);
+    expect((await service.detail(organizerId, event.id)).exactAddress).toBe('Place des Terreaux, Lyon');
+    await expect(service.remove(organizerId, event.id)).rejects.toMatchObject({
+      response: { code: 'EVENT_NOT_DELETABLE' },
+    });
+    await expect(service.cancel(moderatorId, event.id, 'Sortie inappropriée')).rejects.toMatchObject({
+      response: { code: 'ROLE_REQUIRED' },
+    });
+    const cancelled = await service.cancelByModerator(moderatorId, event.id, 'Sortie inappropriée');
+    expect(cancelled.status).toBe(EventStatus.Cancelled);
+    const audit = await db.manager.findOneBy(ModerationAction, { targetEventId: event.id });
+    expect(audit).toMatchObject({ moderatorId, reason: 'Sortie inappropriée' });
+    await expect(service.detail(memberId, event.id)).rejects.toMatchObject({
+      response: { code: 'EVENT_NOT_FOUND' },
+    });
+  });
+});
