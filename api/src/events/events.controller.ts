@@ -86,7 +86,7 @@ export class EventsController {
   }
 
   @Delete(':id/registration')
-  @RequireAccess('approved')
+  @RequireAccess('active')
   @HttpCode(200)
   withdraw(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.registrations.withdraw(user.id, id);

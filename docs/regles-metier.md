@@ -51,8 +51,9 @@ Deux statuts indépendants : `users.status` (`active` par défaut, ou `suspended
   à son compte et peut se déconnecter.
 - **R-STATUS-3** Les statuts ne changent **que** par une route de modération (ou par le seed). Aucune
   route membre n'accepte un champ `status`.
-- **R-STATUS-4** Un changement de statut n'a pas d'effet caché : suspendre un organisateur n'annule
-  pas ses événements, le modérateur les annule explicitement pour que chaque décision soit tracée.
+- **R-STATUS-4** Bloquer un profil ou suspendre un compte retire automatiquement ses inscriptions
+  aux sorties à venir et libère les places. Suspendre un organisateur n'annule pas ses événements :
+  le modérateur les annule explicitement pour que chaque décision soit tracée.
 
 ## 3. Profil et confidentialité
 
@@ -130,7 +131,8 @@ stateDiagram-v2
   Elle ne peut pas descendre sous le nombre d'inscrits actuels (`409 CAPACITY_BELOW_REGISTRATIONS`).
 - **R-EVT-4** `ends_at > starts_at`. Un brouillon ne se publie que si `starts_at` est dans le futur.
 - **R-EVT-5** Les brouillons et les événements publiés pas encore commencés sont modifiables par leur
-  organisateur. Les événements annulés ou terminés sont en lecture seule.
+  organisateur. Tant qu'un événement publié a des inscrits, la date, le lieu et le centre d'intérêt
+  ne peuvent plus changer. Les événements annulés ou terminés sont en lecture seule.
 - **R-EVT-6** Seul un brouillon sans inscription peut être supprimé. Un événement publié s'annule, il
   ne se supprime pas : l'historique est conservé.
 - **R-EVT-7** Un organisateur ne gère que **ses propres** événements (`403 NOT_EVENT_OWNER`). Un
@@ -151,7 +153,7 @@ stateDiagram-v2
   (`SELECT … FOR UPDATE`), compte les inscrits, puis insère ou réactive. Deux demandes simultanées
   pour la dernière place sont sérialisées : l'une réussit, l'autre reçoit `409 EVENT_FULL`.
 - **R-REG-5** Un membre peut se désinscrire jusqu'au début de l'événement ; la place est libérée
-  immédiatement.
+  immédiatement, même si son profil n'est plus approuvé tant que son compte est actif.
 - **R-REG-6** L'organisateur, les modérateurs et les inscrits voient la liste des participants (noms
   affichés des membres actifs et approuvés uniquement).
 

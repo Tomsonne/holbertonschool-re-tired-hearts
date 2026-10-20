@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { PartialType } from '@nestjs/swagger';
+import { OmitType, PartialType } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsDateString,
@@ -13,6 +13,7 @@ import {
   Max,
   Min,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 
 export class EventLocationDto {
@@ -83,4 +84,11 @@ export class EventInputDto {
   capacity: number;
 }
 
-export class UpdateEventDto extends PartialType(EventInputDto) {}
+export class UpdateEventDto extends PartialType(OmitType(EventInputDto, ['location'] as const)) {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsDefined()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => EventLocationDto)
+  location?: EventLocationDto;
+}

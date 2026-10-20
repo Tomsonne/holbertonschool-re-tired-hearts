@@ -48,14 +48,31 @@ function fixture() {
       return callback(manager as unknown as EntityManager);
     }),
   } as unknown as DataSource;
-  return { service: new RegistrationsService(db), events: new EventsService(db), event, actor, rows, manager, operations };
+  return { service: new RegistrationsService(db), events: new EventsService(db), event, actor, profile, rows, manager, operations };
 }
 
 describe('Issue #14 — inscriptions et capacité atomique', () => {
-  it('protège les deux routes par un profil approuvé', () => {
+  it('exige un profil approuvé pour l’inscription et un compte actif pour le retrait', () => {
     const reflector = new Reflector();
     expect(reflector.get(ACCESS_LEVEL_KEY, EventsController.prototype.register)).toBe('approved');
-    expect(reflector.get(ACCESS_LEVEL_KEY, EventsController.prototype.withdraw)).toBe('approved');
+    expect(reflector.get(ACCESS_LEVEL_KEY, EventsController.prototype.withdraw)).toBe('active');
+  });
+
+  it('permet le retrait après perte de l’approbation du profil', async () => {
+    const f = fixture();
+    await f.service.register('member-1', 'event-1');
+    f.profile.status = ProfileStatus.Blocked;
+    await expect(f.service.withdraw('member-1', 'event-1')).resolves.toEqual({
+      status: RegistrationStatus.Withdrawn, availablePlaces: 2,
+    });
+  });
+
+  it('cache un brouillon lors d’une demande d’inscription', async () => {
+    const f = fixture();
+    f.event.status = EventStatus.Draft;
+    await expect(f.service.register('member-1', 'event-1')).rejects.toMatchObject({
+      response: { statusCode: 404, code: 'EVENT_NOT_FOUND' },
+    });
   });
 
   it('verrouille l’événement avant de compter les places', async () => {

@@ -4,7 +4,8 @@ import { AppException } from '../common/app.exception';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User } from '../users/user.entity';
 import { EventRegistration, RegistrationStatus } from './event-registration.entity';
-import { Event, EventStatus } from './event.entity';
+import { EventStatus } from './event.entity';
+import { lockEvent } from './lock-event';
 
 @Injectable()
 export class RegistrationsService {
@@ -22,23 +23,15 @@ export class RegistrationsService {
   }
 
   // Le même verrou est utilisé par EventsService.update lors d'un changement de capacité.
-  private async lockedEvent(manager: EntityManager, eventId: string): Promise<Event> {
-    const event = await manager.findOne(Event, {
-      where: { id: eventId },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!event) {
-      throw new AppException(HttpStatus.NOT_FOUND, 'EVENT_NOT_FOUND', "Cette sortie n'est pas disponible.");
-    }
-    return event;
-  }
-
   async register(actorId: string, eventId: string): Promise<{ status: RegistrationStatus.Registered; availablePlaces: number }> {
     return this.db.transaction('READ COMMITTED', async (manager) => {
       await this.requireApproved(manager, actorId);
-      const event = await this.lockedEvent(manager, eventId);
+      const event = await lockEvent(manager, eventId);
       if (event.organizerId === actorId) {
         throw new AppException(HttpStatus.FORBIDDEN, 'OWN_EVENT', 'Vous ne pouvez pas vous inscrire à votre propre sortie.');
+      }
+      if (event.status === EventStatus.Draft) {
+        throw new AppException(HttpStatus.NOT_FOUND, 'EVENT_NOT_FOUND', "Cette sortie n'est pas disponible.");
       }
       if (event.status !== EventStatus.Published || event.startsAt <= new Date()) {
         throw new AppException(HttpStatus.CONFLICT, 'EVENT_NOT_OPEN', "Cette sortie ne prend plus d'inscriptions.");
@@ -72,8 +65,11 @@ export class RegistrationsService {
 
   async withdraw(actorId: string, eventId: string): Promise<{ status: RegistrationStatus.Withdrawn; availablePlaces: number }> {
     return this.db.transaction('READ COMMITTED', async (manager) => {
-      await this.requireApproved(manager, actorId);
-      const event = await this.lockedEvent(manager, eventId);
+      const user = await manager.findOneBy(User, { id: actorId });
+      if (!user || user.status !== AccountStatus.Active) {
+        throw new AppException(HttpStatus.FORBIDDEN, 'ACCOUNT_SUSPENDED', 'Ce compte ne peut pas participer à une sortie.');
+      }
+      const event = await lockEvent(manager, eventId);
       if (event.startsAt <= new Date()) {
         throw new AppException(HttpStatus.CONFLICT, 'EVENT_NOT_OPEN', 'Cette sortie a déjà commencé.');
       }

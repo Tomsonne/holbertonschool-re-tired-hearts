@@ -110,6 +110,25 @@ describe('RegistrationsService (PostgreSQL)', () => {
     })).toBe(1);
   });
 
+  it('libère les places à la suspension du compte ou au blocage du profil', async () => {
+    const blockedId = await user(UserRole.Member);
+    const suspendedId = await user(UserRole.Member);
+    const outing = await event(2);
+    await registrations.register(blockedId, outing.id);
+    await registrations.register(suspendedId, outing.id);
+
+    await db.manager.update(Profile, { userId: blockedId }, { status: ProfileStatus.Blocked });
+    expect((await db.manager.findOneByOrFail(EventRegistration, { eventId: outing.id, userId: blockedId })).status)
+      .toBe(RegistrationStatus.Withdrawn);
+    await db.manager.update(User, { id: suspendedId }, {
+      status: AccountStatus.Suspended,
+      suspendedAt: new Date(),
+    });
+    expect((await db.manager.findOneByOrFail(EventRegistration, { eventId: outing.id, userId: suspendedId })).status)
+      .toBe(RegistrationStatus.Withdrawn);
+    expect((await events.detail(organizerId, outing.id)).availablePlaces).toBe(2);
+  });
+
   it('refuse son organisateur, un profil non approuvé et un événement annulé', async () => {
     const outing = await event(2);
     await expect(registrations.register(organizerId, outing.id)).rejects.toMatchObject({

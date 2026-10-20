@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { IsDateString, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from 'class-validator';
 
 export class EventFiltersDto {
   @IsOptional()
@@ -17,12 +17,12 @@ export class EventFiltersDto {
 
   @IsOptional()
   @IsString()
-  @Length(1, 5)
+  @Matches(/^(?:[0-9]{5}|2[AB][0-9]{3})$/)
   cityCode?: string;
 
   @IsOptional()
   @IsString()
-  @Length(1, 3)
+  @Matches(/^(?:[0-9]{2,3}|2[AB])$/)
   departmentCode?: string;
 
   @IsOptional()
