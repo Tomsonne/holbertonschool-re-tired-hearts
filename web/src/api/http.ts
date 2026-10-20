@@ -14,6 +14,13 @@ export class ApiError extends Error {
 
 const MESSAGE_INDISPONIBLE = 'Le service est momentanément indisponible.';
 
+// Fonction appelée quand l'API répond 401 SESSION_EXPIRED, quelle que soit la requête.
+// Le routeur l'enregistre au démarrage : ce fichier n'a pas à connaître le routeur.
+let surSessionExpiree: (() => void) | null = null;
+export function quandSessionExpire(action: (() => void) | null): void {
+  surSessionExpiree = action;
+}
+
 async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
   let response: Response;
   try {
@@ -32,6 +39,7 @@ async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', p
 
   if (!response.ok) {
     const corps = await response.json().catch(() => null);
+    if (response.status === 401 && corps?.code === 'SESSION_EXPIRED') surSessionExpiree?.();
     throw new ApiError(
       response.status,
       corps?.code ?? 'UNKNOWN_ERROR',
