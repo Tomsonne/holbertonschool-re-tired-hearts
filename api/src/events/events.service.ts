@@ -117,7 +117,13 @@ export class EventsService {
       query.andWhere('event.interest_id = :interestId', { interestId: filters.interestId });
     }
     if (filters.cityName) {
-      query.andWhere('LOWER(event.city_name) = LOWER(:cityName)', { cityName: filters.cityName });
+      const accented = 'àáâäãåçèéêëìíîïñòóôöõùúûüÿ';
+      const plain = 'aaaaaaceeeeiiiinooooouuuuy';
+      query.andWhere('TRANSLATE(LOWER(event.city_name), :accented, :plain) = :cityName', {
+        accented,
+        plain,
+        cityName: filters.cityName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(),
+      });
     }
     if (filters.cityCode) {
       query.andWhere('event.city_code = :cityCode', { cityCode: filters.cityCode });
@@ -263,6 +269,20 @@ export class EventsService {
       const count = await manager.countBy(EventRegistration, { eventId: id, status: RegistrationStatus.Registered });
       if (merged.capacity < count) {
         throw new AppException(HttpStatus.CONFLICT, 'CAPACITY_BELOW_REGISTRATIONS', 'La capacité ne peut pas être inférieure au nombre de participants inscrits.');
+      }
+      if (event.status === EventStatus.Published && count > 0 && (
+        new Date(merged.startsAt).getTime() !== event.startsAt.getTime() ||
+        new Date(merged.endsAt).getTime() !== event.endsAt.getTime() ||
+        merged.interestId !== event.interestId ||
+        merged.location.cityName.trim() !== event.cityName ||
+        merged.location.departmentCode.trim() !== event.departmentCode ||
+        merged.location.postalCode !== event.postalCode ||
+        (merged.location.cityCode ?? null) !== event.cityCode ||
+        (merged.areaHint?.trim() || null) !== event.areaHint ||
+        merged.exactAddress.trim() !== event.exactAddress
+      )) {
+        throw new AppException(HttpStatus.CONFLICT, 'EVENT_HAS_REGISTRATIONS',
+          'La date, le lieu et le centre d’intérêt ne peuvent plus changer après une inscription.');
       }
       await this.validateInterest(manager, merged.interestId);
       this.assignInput(event, merged);

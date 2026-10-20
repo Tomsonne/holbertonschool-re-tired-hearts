@@ -57,7 +57,8 @@ describe('Issue #13 — filtres des événements publiés', () => {
     const metadata: ArgumentMetadata = { type: 'query', metatype: EventFiltersDto };
     await expect(pipe.transform({ interestId: '1', cityName: ' Lyon ', page: '2' }, metadata))
       .resolves.toMatchObject({ interestId: 1, cityName: 'Lyon', page: 2 });
-    for (const invalid of [{ page: '0' }, { interestId: 'x' }, { status: 'draft' }]) {
+    for (const invalid of [{ page: '0' }, { interestId: 'x' }, { status: 'draft' },
+      { cityCode: 'abc' }, { departmentCode: 'ZZ' }]) {
       await expect(pipe.transform(invalid, metadata)).rejects.toMatchObject({ status: 400 });
     }
   });
@@ -69,11 +70,17 @@ describe('Issue #13 — filtres des événements publiés', () => {
     expect(sql).toContain('event.status = :status');
     expect(sql).toContain('event.starts_at > :from');
     expect(sql).toContain('event.interest_id = :interestId');
-    expect(sql).toContain('LOWER(event.city_name) = LOWER(:cityName)');
-    expect(f.params).toMatchObject({ status: EventStatus.Published, interestId: 1, cityName: 'Lyon' });
+    expect(sql).toContain('TRANSLATE(LOWER(event.city_name), :accented, :plain) = :cityName');
+    expect(f.params).toMatchObject({ status: EventStatus.Published, interestId: 1, cityName: 'lyon' });
     expect(f.eventQuery.skip).toHaveBeenCalledWith(12);
     expect(f.eventQuery.take).toHaveBeenCalledWith(12);
     expect(result).toMatchObject({ page: 2, pageSize: 12, total: 1 });
+  });
+
+  it('normalise les accents du filtre ville', async () => {
+    const f = fixture();
+    await f.service.listPublished('viewer', { cityName: 'Saint-Étienne' });
+    expect(f.params.cityName).toBe('saint-etienne');
   });
 
   it('ne renvoie ni adresse exacte ni code postal dans la liste', async () => {

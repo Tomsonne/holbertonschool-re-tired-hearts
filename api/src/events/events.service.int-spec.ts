@@ -165,6 +165,15 @@ describe('EventsService (PostgreSQL)', () => {
     expect(combined.items[0].id).toBe(cuisineVilleurbanne.id);
     expect(combined.items[0].location).toEqual({ cityName: 'Villeurbanne', departmentCode: '69' });
     expect(JSON.stringify(combined)).not.toContain('69100');
+
+    const saintEtienne = await service.create(organizerId, {
+      ...input(),
+      location: { cityName: 'Saint-Étienne', postalCode: '42000', departmentCode: '42', verified: false },
+    });
+    eventIds.push(saintEtienne.id);
+    await service.publish(organizerId, saintEtienne.id);
+    const withoutAccent = await service.listPublished(memberId, { cityName: 'Saint-Etienne' });
+    expect(withoutAccent.items.map((event) => event.id)).toContain(saintEtienne.id);
   });
 
   it('pagine uniquement les sorties publiées à venir sans exposer l’adresse', async () => {

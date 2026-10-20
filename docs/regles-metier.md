@@ -131,7 +131,8 @@ stateDiagram-v2
   Elle ne peut pas descendre sous le nombre d'inscrits actuels (`409 CAPACITY_BELOW_REGISTRATIONS`).
 - **R-EVT-4** `ends_at > starts_at`. Un brouillon ne se publie que si `starts_at` est dans le futur.
 - **R-EVT-5** Les brouillons et les événements publiés pas encore commencés sont modifiables par leur
-  organisateur. Les événements annulés ou terminés sont en lecture seule.
+  organisateur. Tant qu'un événement publié a des inscrits, la date, le lieu et le centre d'intérêt
+  ne peuvent plus changer. Les événements annulés ou terminés sont en lecture seule.
 - **R-EVT-6** Seul un brouillon sans inscription peut être supprimé. Un événement publié s'annule, il
   ne se supprime pas : l'historique est conservé.
 - **R-EVT-7** Un organisateur ne gère que **ses propres** événements (`403 NOT_EVENT_OWNER`). Un
