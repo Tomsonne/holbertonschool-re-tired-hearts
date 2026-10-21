@@ -245,11 +245,11 @@ describe('ConversationsService (PostgreSQL)', () => {
     await conversations.send(a, id, 'Contenu strictement privé');
     for (const stranger of [outsider, moderator]) {
       for (const request of [
-        conversations.detail(stranger, id),
-        conversations.messages(stranger, id),
-        conversations.send(stranger, id, 'Tentative'),
+        () => conversations.detail(stranger, id),
+        () => conversations.messages(stranger, id),
+        () => conversations.send(stranger, id, 'Tentative'),
       ]) {
-        await expect(request).rejects.toMatchObject({
+        await expect(request()).rejects.toMatchObject({
           status: 404, response: { code: 'CONVERSATION_NOT_FOUND' },
         });
       }
