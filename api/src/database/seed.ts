@@ -8,6 +8,7 @@ import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { Event, EventStatus } from '../events/event.entity';
 import { EventRegistration, RegistrationStatus } from '../events/event-registration.entity';
 import { Conversation } from '../messaging/conversation.entity';
+import { lockEvent } from '../events/lock-event';
 
 // Identifiants stables : le seed reconnaît uniquement les événements qu'il a créés.
 export const DEMO_EVENTS = [
@@ -127,7 +128,7 @@ export async function seedDemoAccounts(db: DataSource, password: string): Promis
 
 export async function seedDemoData(db: DataSource, password: string): Promise<string[]> {
   const created = await seedDemoAccounts(db, password);
-  await db.transaction(async (manager) => {
+  await db.transaction('READ COMMITTED', async (manager) => {
     const interests = await manager.find(Interest);
     const interestsBySlug = new Map(interests.map((interest) => [interest.slug, interest.id]));
     const organizer = await manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[1].email });
@@ -145,6 +146,7 @@ export async function seedDemoData(db: DataSource, password: string): Promise<st
     let conversationContextAvailable = false;
     for (const definition of DEMO_EVENTS) {
       let event = await manager.findOneBy(Event, { id: definition.id });
+      if (event) event = await lockEvent(manager, definition.id);
       if (event && (event.organizerId !== organizer.id || event.title !== definition.title)) {
         throw new Error(`Identifiant d'événement de démonstration déjà utilisé : ${definition.id}.`);
       }
@@ -164,15 +166,25 @@ export async function seedDemoData(db: DataSource, password: string): Promise<st
         }));
       }
       // Une sortie passée ou modifiée reste intacte lors d'un rejeu ultérieur.
-      if (event.status !== EventStatus.Published || event.startsAt <= now || event.capacity < 2) continue;
+      if (event.status !== EventStatus.Published || event.startsAt <= now) continue;
       if (definition.id === DEMO_EVENTS[0].id) conversationContextAvailable = true;
+      const missingMembers: User[] = [];
       for (const member of [member1, member2]) {
         if (!await manager.findOneBy(EventRegistration, { eventId: event.id, userId: member.id })) {
-          // Les deux membres sont actifs, approuvés et distincts de l'organisateur.
-          await manager.save(manager.create(EventRegistration, {
-            eventId: event.id, userId: member.id, status: RegistrationStatus.Registered,
-          }));
+          missingMembers.push(member);
         }
+      }
+      const registeredCount = await manager.countBy(EventRegistration, {
+        eventId: event.id, status: RegistrationStatus.Registered,
+      });
+      if (missingMembers.length > event.capacity - registeredCount) {
+        throw new Error(`Sortie de démonstration ${definition.id} : places insuffisantes pour ${missingMembers.length} inscription(s).`);
+      }
+      for (const member of missingMembers) {
+        // Une ligne withdrawn existante n'est jamais réactivée par le seed.
+        await manager.save(manager.create(EventRegistration, {
+          eventId: event.id, userId: member.id, status: RegistrationStatus.Registered,
+        }));
       }
     }
     for (const [first, second] of [[organizer, member1], [member1, member2]] as const) {
