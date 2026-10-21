@@ -871,6 +871,10 @@ a.bouton {
   margin-bottom: 1rem;
 }
 
+.adresse-manquante p {
+  margin: 0 0 0.6rem;
+}
+
 /* Zones qui reçoivent le focus après une action : cadre visible, comme au clavier. */
 .confirmation:focus,
 .inscription-sortie .message:focus {

@@ -313,6 +313,41 @@ describe("détail d'une sortie", () => {
     expect(boutons(wrapper.get('.inscription-sortie'))).toEqual(['Me désinscrire']);
   });
 
+  it("inscription réussie mais relecture en échec : n'annonce pas l'adresse et permet de la recharger", async () => {
+    vi.mocked(sortiesApi.fetchEvent)
+      .mockResolvedValueOnce(detail())
+      .mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'Le service est momentanément indisponible.'))
+      .mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'Le service est momentanément indisponible.'))
+      .mockResolvedValueOnce(
+        detail({ myRegistration: 'registered', availablePlaces: 3, canRegister: false, exactAddress: '2 allée Jules-Guesde' }),
+      );
+    vi.mocked(sortiesApi.inscrire).mockResolvedValue({ status: 'registered', availablePlaces: 3 });
+    const wrapper = await monter(`/sorties/${ID}`);
+
+    await wrapper.get('.inscription-sortie button').trigger('click');
+    await flushPromises();
+
+    // L'inscription est bien confirmée, mais sans promettre une adresse qui n'est pas là.
+    const message = wrapper.get('.inscription-sortie [role="status"]');
+    expect(message.text()).toContain('Vous êtes inscrit à « Balade au Jardin des Plantes »');
+    expect(message.text()).toContain("L'adresse exacte n'a pas pu être chargée");
+    expect(message.text()).not.toContain('maintenant affichée');
+    expect(wrapper.get('#titre-bandeau-sortie').text()).toBe('Vous êtes inscrit');
+    expect(wrapper.text()).toContain('3 places restantes sur 12');
+
+    // Nouvel échec : il est signalé, le bouton reste disponible.
+    const zone = () => wrapper.get('.adresse-manquante');
+    await zone().get('button').trigger('click');
+    await flushPromises();
+    expect(zone().get('[role="alert"]').text()).toContain("L'adresse n'a toujours pas pu être chargée");
+
+    // Réussite : l'adresse remplace le message et le bouton.
+    await zone().get('button').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.adresse-manquante').exists()).toBe(false);
+    expect(fiche(wrapper.get('.fiche'))['Adresse exacte']).toBe('2 allée Jules-Guesde');
+  });
+
   it("sortie devenue complète entre-temps : le message de l'API est lu et l'écran se met à jour", async () => {
     vi.mocked(sortiesApi.fetchEvent)
       .mockResolvedValueOnce(detail({ availablePlaces: 1 }))

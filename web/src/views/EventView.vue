@@ -87,14 +87,30 @@ async function charger(): Promise<void> {
 
 // Relecture discrète après une action : places, adresse exacte et boutons à jour.
 // En cas d'échec, on garde ce qui est affiché (déjà corrigé avec la réponse de l'action).
-async function rafraichir(): Promise<void> {
+// Renvoie true seulement si la fiche affichée vient d'être relue : l'appelant ne doit jamais
+// annoncer une information (ex. l'adresse exacte) que la relecture n'a pas apportée.
+async function rafraichir(): Promise<boolean> {
   const numero = ++derniereRequete;
   try {
     const reponse = await fetchEvent(identifiant());
-    if (numero === derniereRequete) sortie.value = reponse;
+    if (numero !== derniereRequete) return false;
+    sortie.value = reponse;
+    return true;
   } catch {
-    /* rien : l'écran reste utilisable */
+    return false;
   }
+}
+
+// Inscrit, mais adresse absente : la relecture a échoué. On le dit et on propose de réessayer.
+const adresseManquante = computed(
+  () => !!sortie.value && estInscrit.value && !sortie.value.isOrganizer && !sortie.value.exactAddress,
+);
+const rechargementAdresse = ref<'en-cours' | 'echec' | null>(null);
+
+async function rechargerAdresse(): Promise<void> {
+  rechargementAdresse.value = 'en-cours';
+  const relue = await rafraichir();
+  rechargementAdresse.value = relue && sortie.value?.exactAddress ? null : 'echec';
 }
 
 async function annoncer(type: 'succes' | 'erreur', texte: string): Promise<void> {
@@ -127,8 +143,15 @@ async function sInscrire(): Promise<void> {
   try {
     const resultat = await inscrire(sortie.value.id);
     sortie.value = { ...sortie.value, myRegistration: resultat.status, availablePlaces: resultat.availablePlaces, canRegister: false };
-    await rafraichir();
-    await annoncer('succes', `Vous êtes inscrit à « ${titre} ». L'adresse exacte du rendez-vous est maintenant affichée.`);
+    rechargementAdresse.value = null;
+    const relue = await rafraichir();
+    await annoncer(
+      'succes',
+      relue && sortie.value?.exactAddress
+        ? `Vous êtes inscrit à « ${titre} ». L'adresse exacte du rendez-vous est maintenant affichée.`
+        : `Vous êtes inscrit à « ${titre} ». L'adresse exacte n'a pas pu être chargée pour l'instant : ` +
+            'utilisez le bouton « Afficher l’adresse exacte ».',
+    );
   } catch (e) {
     await traiterEchec(e);
   } finally {
@@ -241,6 +264,20 @@ watch(() => route.params.eventId, (id) => id && charger());
           <dt>Adresse exacte</dt>
           <dd>
             <template v-if="sortie.exactAddress">{{ sortie.exactAddress }}</template>
+            <div v-else-if="adresseManquante" class="adresse-manquante">
+              <p>Vous êtes inscrit, mais l'adresse n'a pas pu être chargée.</p>
+              <p v-if="rechargementAdresse === 'echec'" class="champ__erreur" role="alert">
+                L'adresse n'a toujours pas pu être chargée. Vérifiez votre connexion internet, puis réessayez.
+              </p>
+              <button
+                type="button"
+                class="bouton bouton--secondaire"
+                :disabled="rechargementAdresse === 'en-cours'"
+                @click="rechargerAdresse"
+              >
+                {{ rechargementAdresse === 'en-cours' ? 'Chargement…' : 'Afficher l’adresse exacte' }}
+              </button>
+            </div>
             <template v-else>Communiquée uniquement aux personnes inscrites.</template>
           </dd>
           <dt>Organisée par</dt>
