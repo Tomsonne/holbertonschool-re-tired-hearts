@@ -745,6 +745,155 @@ a.bouton {
   margin: 1rem 0 1.5rem;
 }
 
+/* ---------- Sorties ---------- */
+.liste-sorties {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 1.2rem;
+}
+
+.carte-sortie {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.3rem;
+  min-width: 0;
+}
+
+.carte-sortie p {
+  margin: 0;
+}
+
+.carte-sortie__titre {
+  font-size: 1.3rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.carte-sortie__titre a {
+  color: var(--vert);
+}
+
+.carte-sortie__infos {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 0.9rem;
+  margin: 0;
+}
+
+.carte-sortie__infos dt {
+  font-weight: 700;
+  color: var(--vert);
+}
+
+.carte-sortie__infos dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.carte-sortie .carte-sortie__pied {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin-top: auto;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--filet);
+  color: var(--encre-douce);
+}
+
+.carte-sortie__inscrit {
+  color: var(--vert);
+}
+
+/* Variantes de badge : le texte dit toujours le statut, la couleur n'est qu'un appui. */
+.badge--ouverte {
+  border-color: var(--vert);
+  color: var(--vert);
+}
+
+.badge--annulee {
+  border-color: var(--bordeaux);
+  background: var(--bordeaux);
+  color: var(--blanc-casse);
+}
+
+.badge--terminee {
+  border-color: var(--encre-douce);
+  color: var(--encre-douce);
+}
+
+.fiche-sortie__titre {
+  margin-bottom: 0.2rem;
+  overflow-wrap: anywhere;
+}
+
+.fiche-sortie > .surtitre {
+  margin-bottom: 1.2rem;
+}
+
+.bandeau-sortie {
+  margin-bottom: 1.5rem;
+}
+
+.bandeau-sortie h3 {
+  color: inherit;
+  margin-bottom: 0.4rem;
+}
+
+.bandeau-sortie p {
+  margin: 0.4rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.fiche-sortie__corps {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.fiche-sortie__description {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  margin: 0 0 1.5rem;
+}
+
+.inscription-sortie > p,
+.inscription-sortie .confirmation p {
+  margin: 0 0 1rem;
+}
+
+.inscription-sortie .message {
+  margin-bottom: 1rem;
+}
+
+.adresse-manquante p {
+  margin: 0 0 0.6rem;
+}
+
+/* Zones qui reçoivent le focus après une action : cadre visible, comme au clavier. */
+.confirmation:focus,
+.inscription-sortie .message:focus {
+  outline: 3px solid var(--vert);
+  outline-offset: 3px;
+}
+
+.confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+@media (max-width: 50rem) {
+  .fiche-sortie__corps {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Centres d'intérêt ---------- */
 .liste-interets {
   list-style: none;

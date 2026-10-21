@@ -26,6 +26,9 @@ export const useSessionStore = defineStore('session', {
     estSuspendu: (state) => state.utilisateur?.accountStatus === 'suspended',
     estApprouve: (state) =>
       state.utilisateur?.accountStatus === 'active' && state.utilisateur.profileStatus === 'approved',
+    // Sorties : tout compte actif dont le profil n'est pas bloqué, même en attente (§5).
+    peutVoirSorties: (state) =>
+      state.utilisateur?.accountStatus === 'active' && state.utilisateur.profileStatus !== 'blocked',
     estOrganisateur: (state) => state.utilisateur?.role === 'organizer',
     estModerateur: (state) => state.utilisateur?.role === 'moderator',
   },

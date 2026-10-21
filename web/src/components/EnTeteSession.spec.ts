@@ -30,6 +30,7 @@ async function monter() {
       { path: '/inscription', name: 'inscription', component: vide },
       { path: '/mon-profil', name: 'mon-profil', component: vide },
       { path: '/membres', name: 'membres', component: vide },
+      { path: '/sorties', name: 'sorties', component: vide },
     ],
   });
   await router.push('/page');
@@ -59,8 +60,9 @@ describe("zone de session de l'en-tête", () => {
     const { wrapper, router } = await monter();
 
     expect(wrapper.text()).toContain('Connecté en tant que Odette');
-    // Profil approuvé : accès à la découverte des membres et à son profil.
+    // Profil approuvé : accès aux sorties, à la découverte des membres et à son profil.
     expect(wrapper.findAll('a').map((a) => [a.text(), a.attributes('href')])).toEqual([
+      ['Les sorties', '/sorties'],
       ['Les membres', '/membres'],
       ['Mon profil', '/mon-profil'],
     ]);
@@ -73,11 +75,22 @@ describe("zone de session de l'en-tête", () => {
     expect(wrapper.text()).toContain('Se connecter');
   });
 
-  it("ne propose pas la découverte des membres à un profil en attente", async () => {
+  it("propose les sorties mais pas la découverte des membres à un profil en attente", async () => {
     vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, profileStatus: 'pending' });
     const { wrapper } = await monter();
 
-    expect(wrapper.findAll('a').map((a) => a.text())).toEqual(['Mon profil']);
+    expect(wrapper.findAll('a').map((a) => a.text())).toEqual(['Les sorties', 'Mon profil']);
+  });
+
+  it('ne propose ni les sorties ni les membres à un profil bloqué ou un compte suspendu', async () => {
+    vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, profileStatus: 'blocked' });
+    const bloque = await monter();
+    expect(bloque.wrapper.findAll('a').map((a) => a.text())).toEqual(['Mon profil']);
+
+    setActivePinia(createPinia());
+    vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, accountStatus: 'suspended' });
+    const suspendu = await monter();
+    expect(suspendu.wrapper.findAll('a').map((a) => a.text())).toEqual(['Mon profil']);
   });
 
   it("signale une déconnexion échouée, reste connecté et permet de réessayer", async () => {
