@@ -4,7 +4,7 @@ import { DataSource } from 'typeorm';
 import { buildDataSourceOptions } from '../database/typeorm.config';
 import { EventRegistration } from '../events/event-registration.entity';
 import { EventInputDto } from '../events/event-input.dto';
-import { Event } from '../events/event.entity';
+import { Event, EventStatus } from '../events/event.entity';
 import { EventsService } from '../events/events.service';
 import { RegistrationsService } from '../events/registrations.service';
 import { Interest } from '../interests/interest.entity';
@@ -129,6 +129,20 @@ describe('ConversationsService (PostgreSQL)', () => {
     expect(await db.manager.countBy(Conversation, {
       participantAId: [a, b].sort()[0], participantBId: [a, b].sort()[1],
     })).toBe(1);
+  });
+
+  it('autorise un premier contact après la fin de la sortie si les inscriptions restent actives', async () => {
+    const organizer = await user(UserRole.Organizer);
+    const a = await user();
+    const b = await user();
+    const eventId = await event(organizer);
+    await registrations.register(a, eventId);
+    await registrations.register(b, eventId);
+    await db.manager.update(Event, { id: eventId }, {
+      startsAt: new Date(Date.now() - 7200000), endsAt: new Date(Date.now() - 3600000),
+      status: EventStatus.Completed, completedAt: new Date(),
+    });
+    expect((await conversations.start(a, b, eventId)).created).toBe(true);
   });
 
   it('refuse un retrait, un mauvais contexte et un contact avec soi-même', async () => {

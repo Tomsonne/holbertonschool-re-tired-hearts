@@ -44,7 +44,7 @@ export class ConversationsService {
     // quel événement admissible suffit ; les inscriptions retirées sont exclues.
     const eligible: { id: string }[] = await this.db.query(`
       SELECT e.id FROM events e
-      WHERE e.status = 'published'
+      WHERE e.status <> 'draft'
         AND ($3::uuid IS NULL OR e.id = $3::uuid)
         AND (
           (e.organizer_id = $1 AND EXISTS (
