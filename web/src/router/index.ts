@@ -22,8 +22,13 @@ export const router = createRouter({
       component: () => import('../views/RegisterView.vue'),
       meta: { title: 'Inscription', invitesSeulement: true },
     },
-    // Les pages réservées aux membres déclareront `meta: { connexionRequise: true }`
-    // (ex. « Mon profil », mission 9).
+    // Pages réservées aux membres connectés : la garde envoie vers la connexion, puis revient ici.
+    {
+      path: '/mon-profil',
+      name: 'mon-profil',
+      component: () => import('../views/ProfileView.vue'),
+      meta: { title: 'Mon profil', connexionRequise: true },
+    },
   ],
 });
 

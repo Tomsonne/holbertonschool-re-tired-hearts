@@ -28,6 +28,7 @@ async function monter() {
       { path: '/page', name: 'page', component: vide },
       { path: '/connexion', name: 'connexion', component: vide },
       { path: '/inscription', name: 'inscription', component: vide },
+      { path: '/mon-profil', name: 'mon-profil', component: vide },
     ],
   });
   await router.push('/page');
@@ -57,6 +58,8 @@ describe("zone de session de l'en-tête", () => {
     const { wrapper, router } = await monter();
 
     expect(wrapper.text()).toContain('Connecté en tant que Odette');
+    expect(wrapper.get('a').text()).toBe('Mon profil');
+    expect(wrapper.get('a').attributes('href')).toBe('/mon-profil');
     await wrapper.get('button').trigger('click');
     await flushPromises();
 

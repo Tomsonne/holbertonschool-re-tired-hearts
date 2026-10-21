@@ -36,6 +36,7 @@ async function seDeconnecter(): Promise<void> {
       <p class="nav-session__nom">
         Connecté en tant que <strong>{{ session.utilisateur?.displayName }}</strong>
       </p>
+      <RouterLink class="bouton bouton--secondaire" :to="{ name: 'mon-profil' }">Mon profil</RouterLink>
       <button type="button" class="bouton bouton--secondaire" :disabled="deconnexionEnCours" @click="seDeconnecter">
         {{ deconnexionEnCours ? 'Déconnexion…' : erreurDeconnexion ? 'Réessayer la déconnexion' : 'Se déconnecter' }}
       </button>

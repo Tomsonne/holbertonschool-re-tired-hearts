@@ -108,4 +108,16 @@ describe('magasin de session', () => {
 
     expect(session.consommerExpiration()).toBe(false);
   });
+
+  it('met à jour le nom et le statut du profil après GET ou PUT /me/profile', async () => {
+    vi.mocked(authApi.login).mockResolvedValue({ ...membre });
+    const session = useSessionStore();
+    await session.connexion({ email: membre.email, password: 'un-mot-de-passe-long' });
+
+    session.synchroniserProfil({ displayName: 'Odette B.', status: 'blocked' });
+
+    expect(session.utilisateur?.displayName).toBe('Odette B.');
+    expect(session.utilisateur?.profileStatus).toBe('blocked');
+    expect(session.estApprouve).toBe(false);
+  });
 });

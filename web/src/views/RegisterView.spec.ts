@@ -29,6 +29,7 @@ async function monter() {
       { path: '/', name: 'accueil', component: vide },
       { path: '/connexion', name: 'connexion', component: vide, meta: { invitesSeulement: true } },
       { path: '/inscription', name: 'inscription', component: RegisterView, meta: { invitesSeulement: true } },
+      { path: '/mon-profil', name: 'mon-profil', component: vide, meta: { connexionRequise: true } },
     ],
   });
   router.beforeEach(gardeDeSession);
@@ -105,6 +106,10 @@ describe("écran d'inscription", () => {
     expect(succes.text()).toContain('complétez votre profil');
     expect(document.activeElement).toBe(succes.element);
     expect(wrapper.find('form').exists()).toBe(false);
+
+    await succes.get('button').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.name).toBe('mon-profil');
   });
 
   it("range l'e-mail déjà utilisé sous le bon champ, avec un lien vers la connexion", async () => {
