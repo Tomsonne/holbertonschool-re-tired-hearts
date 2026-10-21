@@ -80,7 +80,7 @@ colonne *Étu.* reprend cette répartition :
 | 24 | Restrictions de statut appliquées à toute l'API | `pending`, `blocked`, `suspended` appliqués côté API, pas seulement dans Vue · Compte suspendu refusé partout sauf `/me` et déconnexion · Rôle et statuts non modifiables par requête forgée | M | A |
 | 25 | Back-office Vue de modération | Files des profils en attente, des comptes et des événements · Confirmation nommant la cible avant action destructrice · Inaccessible à un membre, côté route comme côté API | M | C |
 | 26 | Mentions légales et explication de la vie privée | Pages atteignables depuis le pied de page, en langage simple · Ce qui est visible, ce qui reste privé, comment les données sont traitées | S | C |
-| 27 | En-têtes de sécurité, limitation de débit et erreurs sûres | `helmet` configuré · Limitation sur connexion, inscription et envoi de messages · Aucune trace, aucun secret ni message privé dans une erreur | M | A |
+| 27 | En-têtes de sécurité, limitation de débit et erreurs sûres | `helmet` configuré · Limitation sur connexion, inscription et envoi de messages (route de l’issue 20) · Aucune trace, aucun secret ni message privé dans une erreur | M | A |
 | 28 | Plan de recette et revue de sécurité | `security-review.md` : scénarios, résultats attendus et obtenus · Par risque : impact, mitigation, limite restante · Vérification clavier, zoom 200 %, largeur mobile | M | A B C |
 
 ## Tâche 5 — Livraison reproductible · *jalon « Vendredi »*

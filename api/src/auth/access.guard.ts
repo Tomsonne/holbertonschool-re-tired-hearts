@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, ForbiddenException, HttpStatus, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, HttpStatus, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -41,20 +41,20 @@ export class AccessGuard implements CanActivate {
     const profile = await this.profiles.findOneBy({ userId: user.id });
     const profileReadAllowed = PROFILE_BLOCK_READ_ROUTES.has(`${request.method} ${request.path}`);
     if (profile?.status === ProfileStatus.Blocked && !profileReadAllowed) {
-      throw new ForbiddenException({
-        statusCode: 403,
-        code: 'PROFILE_BLOCKED',
-        message: 'Ce profil ne peut pas accéder à cette fonctionnalité.',
-      });
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        'PROFILE_BLOCKED',
+        'Ce profil ne peut pas accéder à cette fonctionnalité.',
+      );
     }
 
     if (access === 'approved' || access === 'organizer') {
       if (profile?.status !== ProfileStatus.Approved) {
-        throw new ForbiddenException({
-          statusCode: 403,
-          code: 'PROFILE_NOT_APPROVED',
-          message: 'Votre profil doit être approuvé pour accéder à cette fonctionnalité.',
-        });
+        throw new AppException(
+          HttpStatus.FORBIDDEN,
+          'PROFILE_NOT_APPROVED',
+          'Votre profil doit être approuvé pour accéder à cette fonctionnalité.',
+        );
       }
     }
 
@@ -64,11 +64,11 @@ export class AccessGuard implements CanActivate {
       (levelRole !== undefined && user.role !== levelRole) ||
       (requiredRoles.length > 0 && !requiredRoles.includes(user.role))
     ) {
-      throw new ForbiddenException({
-        statusCode: 403,
-        code: 'ROLE_REQUIRED',
-        message: "Vous n'avez pas le rôle requis pour effectuer cette action.",
-      });
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        'ROLE_REQUIRED',
+        "Vous n'avez pas le rôle requis pour effectuer cette action.",
+      );
     }
     return true;
   }
