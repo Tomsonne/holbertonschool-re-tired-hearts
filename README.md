@@ -76,25 +76,34 @@ cd api
 npm run migration:run            # applique les migrations en attente
 npm run migration:show           # liste les migrations et leur état
 npm run migration:revert         # annule la dernière migration
-npm run db:reset                 # supprime tout le schéma puis rejoue les migrations
+# Pour réinitialiser une base de démonstration jetable, voir la procédure ci-dessous.
 npm run migration:generate -- src/database/migrations/<NomEnPascalCase>
 ```
 
-Repartir d'un volume PostgreSQL totalement vierge :
+`db:reset` supprime **tout le schéma** de la base indiquée par `DATABASE_NAME`.
+Ne l'utiliser que sur une base de démonstration jetable, jamais sur la base habituelle ni sur un
+volume Docker partagé. Aucun volume Docker ne doit être supprimé pour cette procédure.
+
+À l'inverse, pour repartir d'une base de **développement** ou de **démonstration** vierge — celles
+que `db:reset` refuse — détruire le volume PostgreSQL puis rejouer les données de démonstration :
 
 ```bash
-docker compose down -v && docker compose up --build
+docker compose down -v && docker compose up --build -d   # volume neuf ; l'API rejoue les migrations
+cd api && npm run seed
 ```
+
+Le volume recréé rejoue `docker/postgres-init`, donc la base `<DATABASE_NAME>_test` des tests revient
+elle aussi. `npm run typeorm -- schema:drop` n'est pas une alternative : il laisse en place les
+fonctions PostgreSQL créées par les migrations, que `migration:run` ne peut alors plus recréer.
 
 | Migration | Contenu |
 |---|---|
 | `InitialSchema` | Types énumérés, les 9 tables, clés, contraintes et index |
 | `SeedInterests` | 16 centres d'intérêt de référence |
 
-Les comptes de démonstration ne sont pas des migrations. Un script séparé les crée après les
-migrations ; les événements et conversations de démonstration seront ajoutés en tâche 5.
+Les données de démonstration ne sont pas des migrations. Un script séparé les crée après les migrations.
 
-### Comptes de démonstration (issue #7)
+### Données de démonstration (issues #7 et #30)
 
 Sur une base migrée, exécuter depuis `api/` :
 
@@ -117,12 +126,40 @@ Le script crée quatre comptes fictifs avec le mot de passe **`ReTiredDemo2026!`
 | `membre1@example.test` | membre | approuvé |
 | `membre2@example.test` | membre | approuvé |
 
+Il crée aussi deux sorties futures publiées, quatre inscriptions actives (deux membres par sortie)
+et deux conversations éligibles entre participants distincts. Tous les noms, lieux, adresses et
+e-mails sont fictifs ; aucun message personnel n'est créé. Les sorties ont des identifiants stables.
+
 Ces identifiants sont publics et réservés à une base de démonstration. Le mot de passe peut être
 remplacé via `DEMO_PASSWORD` (12 à 128 caractères). Le script refuse de s'exécuter avec
 `NODE_ENV=production` sans `ALLOW_DEMO_SEED=true`. Il peut être relancé : les comptes existants ne
 sont ni dupliqués ni modifiés, et un e-mail existant avec un autre rôle provoque une erreur plutôt
 qu'une promotion silencieuse. Pour retrouver l'état initial après des modifications de profils,
-réinitialiser la base puis relancer le script.
+réinitialiser la base puis relancer le script. Les sorties, inscriptions et conversations déjà
+présentes ne sont pas écrasées ; les données d'autres comptes ne sont pas supprimées.
+
+#### Réinitialisation sur une base jetable
+
+Prérequis : PostgreSQL accessible sur `localhost:5442`, l'utilisateur `rth` autorisé à créer une
+base, `api/.env` ou les variables `DATABASE_*` renseignées, dépendances installées avec `npm ci`.
+Créer une base dédiée, puis exécuter **depuis `api/`** :
+
+```bash
+createdb -h localhost -p 5442 -U rth re_tired_hearts_demo_test
+DATABASE_NAME=re_tired_hearts_demo_test npm run migration:run
+DATABASE_NAME=re_tired_hearts_demo_test npm run seed
+DATABASE_NAME=re_tired_hearts_demo_test npm run seed  # vérification du rejeu
+DEMO_RESET_CONFIRM=re_tired_hearts_demo_test DATABASE_NAME=re_tired_hearts_demo_test npm run db:reset
+DATABASE_NAME=re_tired_hearts_demo_test npm run seed
+```
+
+`db:reset` efface toutes les tables, comptes, profils, sorties, inscriptions, conversations,
+messages et références de **cette seule base**, puis réapplique les migrations. Les données ne
+peuvent pas être récupérées sans sauvegarde. Pour supprimer ensuite la base jetable uniquement :
+
+```bash
+dropdb -h localhost -p 5442 -U rth re_tired_hearts_demo_test
+```
 
 ## Dépendances et fichiers de lock
 
