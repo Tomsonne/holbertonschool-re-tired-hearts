@@ -5,8 +5,8 @@ import { fetchProfiles, type Page, type PublicProfile } from '../api/decouverte'
 import { ApiError } from '../api/http';
 import { fetchInterests, type Interest } from '../api/interests';
 import AccesReserve from '../components/AccesReserve.vue';
-import { memoriserRecherche } from '../router/derniereRecherche';
 import { DEPARTEMENT_VALIDE, formaterLocalisation, formaterMembreDepuis } from '../formats';
+import { lireFiltres, versQuery } from '../router/filtresMembres';
 import { useSessionStore } from '../stores/session';
 
 // Découverte des membres (mission 10) : GET /api/profiles, réservé aux profils approuvés.
@@ -21,35 +21,13 @@ const etat = ref<'chargement' | 'erreur' | 'pret'>('chargement');
 const erreur = ref('');
 const resultats = ref<Page<PublicProfile> | null>(null);
 const interets = ref<Interest[]>([]);
+const etatInterets = ref<'chargement' | 'erreur' | 'pret'>('chargement');
 const accesRefuse = ref(false);
 
 const champInteret = ref('');
 const champDepartement = ref('');
 const erreurDepartement = ref<string | null>(null);
 const titreResultats = ref<HTMLElement | null>(null);
-
-type Filtres = { interestId?: number; departmentCode?: string; page: number };
-
-// Une adresse modifiée à la main ne doit jamais casser l'écran : on ignore ce qui est invalide.
-function lireFiltres(query: LocationQuery): Filtres {
-  const texte = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
-  const interet = Number(texte(query.interet));
-  const departement = texte(query.departement).toUpperCase();
-  const page = Number(texte(query.page));
-  return {
-    interestId: Number.isInteger(interet) && interet > 0 ? interet : undefined,
-    departmentCode: DEPARTEMENT_VALIDE.test(departement) ? departement : undefined,
-    page: Number.isInteger(page) && page > 1 ? page : 1,
-  };
-}
-
-function versQuery(f: Filtres): Record<string, string> {
-  const q: Record<string, string> = {};
-  if (f.interestId !== undefined) q.interet = String(f.interestId);
-  if (f.departmentCode) q.departement = f.departmentCode;
-  if (f.page > 1) q.page = String(f.page);
-  return q;
-}
 
 const filtres = computed(() => lireFiltres(route.query));
 const filtresActifs = computed(() => filtres.value.interestId !== undefined || !!filtres.value.departmentCode);
@@ -69,19 +47,26 @@ function lienPage(page: number) {
   return { name: 'membres', query: versQuery({ ...filtres.value, page }) };
 }
 
+// Numéro de la dernière recherche lancée : si l'on change vite de page ou de filtre (ou si l'on
+// remonte l'historique), une réponse arrivée en retard ne doit pas écraser la plus récente.
+let derniereRequete = 0;
+
 async function charger(): Promise<void> {
   if (!session.estApprouve) {
     accesRefuse.value = true;
     return;
   }
+  const numero = ++derniereRequete;
   etat.value = 'chargement';
   erreur.value = '';
-  memoriserRecherche(route.fullPath);
   try {
     const f = filtres.value;
-    resultats.value = await fetchProfiles({ interestId: f.interestId, departmentCode: f.departmentCode, page: f.page });
+    const reponse = await fetchProfiles({ interestId: f.interestId, departmentCode: f.departmentCode, page: f.page });
+    if (numero !== derniereRequete) return;
+    resultats.value = reponse;
     etat.value = 'pret';
   } catch (e) {
+    if (numero !== derniereRequete) return;
     // Statut changé depuis la connexion (profil bloqué ou repassé en attente).
     if (e instanceof ApiError && (e.code === 'PROFILE_NOT_APPROVED' || e.code === 'PROFILE_BLOCKED')) {
       const u = session.utilisateur;
@@ -100,10 +85,22 @@ function remplirChamps(): void {
   erreurDepartement.value = null;
 }
 
-onMounted(async () => {
+// Référentiel des centres d'intérêt, chargé à part : s'il tarde, la liste des membres s'affiche
+// quand même ; s'il échoue, on le dit au lieu de faire disparaître le filtre.
+async function chargerInterets(): Promise<void> {
+  etatInterets.value = 'chargement';
+  try {
+    interets.value = await fetchInterests();
+    etatInterets.value = 'pret';
+  } catch {
+    etatInterets.value = 'erreur';
+  }
+}
+
+onMounted(() => {
   remplirChamps();
-  if (session.estApprouve) interets.value = await fetchInterests().catch(() => []);
-  await charger();
+  if (session.estApprouve) void chargerInterets();
+  void charger();
 });
 
 // Changement de filtre ou de page : on recharge, puis on place le focus sur les résultats
@@ -167,12 +164,22 @@ async function effacerFiltres(): Promise<void> {
           <div class="champ">
             <label for="filtre-interet">Centre d'intérêt</label>
             <p id="filtre-interet-aide" class="champ__aide">Un thème à la fois.</p>
-            <select id="filtre-interet" v-model="champInteret" name="interet" aria-describedby="filtre-interet-aide">
-              <option value="">Tous les centres d'intérêt</option>
+            <select
+              id="filtre-interet"
+              v-model="champInteret"
+              name="interet"
+              :disabled="etatInterets === 'erreur'"
+              :aria-describedby="etatInterets === 'erreur' ? 'filtre-interet-aide filtre-interet-erreur' : 'filtre-interet-aide'"
+            >
+              <option value="">{{ etatInterets === 'chargement' ? 'Chargement des centres d’intérêt…' : 'Tous les centres d\'intérêt' }}</option>
               <option v-for="interet in interets" :key="interet.id" :value="String(interet.id)">
                 {{ interet.label }}
               </option>
             </select>
+            <div v-if="etatInterets === 'erreur'" id="filtre-interet-erreur" class="champ__erreur" role="alert">
+              <p>La liste des centres d'intérêt n'a pas pu être chargée : ce filtre est indisponible pour l'instant.</p>
+              <button type="button" class="bouton bouton--secondaire" @click="chargerInterets">Réessayer</button>
+            </div>
           </div>
           <div class="champ">
             <label for="filtre-departement">Département</label>
@@ -237,7 +244,9 @@ async function effacerFiltres(): Promise<void> {
           <ul class="liste-membres">
             <li v-for="membre in resultats.items" :key="membre.userId" class="carte carte-membre">
               <h4 class="carte-membre__nom">
-                <RouterLink :to="{ name: 'membre', params: { userId: membre.userId } }">{{ membre.displayName }}</RouterLink>
+                <RouterLink :to="{ name: 'membre', params: { userId: membre.userId }, query: versQuery(filtres) }">{{
+                  membre.displayName
+                }}</RouterLink>
               </h4>
               <p v-if="membre.isOrganizer" class="badge">Organisateur</p>
               <p class="carte-membre__lieu">{{ formaterLocalisation(membre.location) }}</p>

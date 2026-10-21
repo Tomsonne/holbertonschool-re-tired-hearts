@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router';
 import { fetchProfile, type PublicProfile } from '../api/decouverte';
 import { ApiError } from '../api/http';
 import AccesReserve from '../components/AccesReserve.vue';
-import { derniereRecherche } from '../router/derniereRecherche';
+import { lireFiltres, versQuery } from '../router/filtresMembres';
 import { formaterLocalisation, formaterMembreDepuis, LIBELLES_RECHERCHE } from '../formats';
 import { useSessionStore } from '../stores/session';
 
@@ -20,8 +20,13 @@ const erreur = ref('');
 const membre = ref<PublicProfile | null>(null);
 const accesRefuse = ref(false);
 
-// Retour à la liste avec ses filtres et sa page.
-const retour = derniereRecherche();
+// Retour à la liste avec ses filtres et sa page : la fiche les garde dans sa propre adresse
+// (/membres/:id?departement=31&page=2), donc ils survivent au rechargement et à l'ouverture
+// directe. Ils sont relus et nettoyés : l'adresse ne peut pas renvoyer ailleurs que vers /membres.
+const retour = computed(() => ({ name: 'membres', query: versQuery(lireFiltres(route.query)) }));
+
+// Même protection que la liste : une fiche demandée avant une autre ne doit pas l'écraser.
+let derniereRequete = 0;
 
 const recherche = computed(() => (membre.value?.lookingFor ?? []).map((r) => LIBELLES_RECHERCHE[r] ?? r).join(', '));
 
@@ -30,12 +35,16 @@ async function charger(): Promise<void> {
     accesRefuse.value = true;
     return;
   }
+  const numero = ++derniereRequete;
   etat.value = 'chargement';
   try {
-    membre.value = await fetchProfile(String(route.params.userId));
+    const reponse = await fetchProfile(String(route.params.userId));
+    if (numero !== derniereRequete) return;
+    membre.value = reponse;
     etat.value = 'pret';
     document.title = `${membre.value.displayName} — Re-Tired Hearts`;
   } catch (e) {
+    if (numero !== derniereRequete) return;
     // R-PROF-4 : même réponse pour un profil inconnu, en attente, bloqué, masqué ou suspendu.
     if (e instanceof ApiError && e.status === 404) {
       etat.value = 'indisponible';

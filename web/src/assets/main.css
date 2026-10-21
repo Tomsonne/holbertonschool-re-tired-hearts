@@ -606,6 +606,15 @@ a.bouton {
   margin-bottom: 2rem;
 }
 
+.champ select:disabled {
+  cursor: not-allowed;
+  color: var(--encre-douce);
+}
+
+.champ__erreur p {
+  margin: 0 0 0.5rem;
+}
+
 .filtres__champs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));

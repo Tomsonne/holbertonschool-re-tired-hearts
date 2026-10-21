@@ -184,7 +184,7 @@ describe('découverte des membres', () => {
 
     it("ignore les valeurs invalides tapées dans l'adresse", async () => {
       vi.mocked(decouverteApi.fetchProfiles).mockResolvedValue(page([membre(1)]));
-      await monter('/membres?interet=abc&departement=<script>&page=-3');
+      await monter('/membres?interet=2147483648&departement=<script>&page=-3');
 
       expect(decouverteApi.fetchProfiles).toHaveBeenCalledWith({ interestId: undefined, departmentCode: undefined, page: 1 });
     });
@@ -209,12 +209,63 @@ describe('découverte des membres', () => {
       expect(wrapper.find('[rel="prev"]').exists()).toBe(true);
     });
 
+    it("ignore une réponse arrivée en retard : la recherche la plus récente l'emporte", async () => {
+      let repondreAncienne!: (p: Page<PublicProfile>) => void;
+      vi.mocked(decouverteApi.fetchProfiles)
+        .mockResolvedValueOnce(page([membre(1)]))
+        .mockReturnValueOnce(new Promise((ok) => (repondreAncienne = ok)))
+        .mockResolvedValueOnce(page([membre(3, { displayName: 'Résultat récent' })]));
+      const wrapper = await monter();
+
+      // Deux recherches enchaînées : la première (lente) répond après la seconde.
+      await router.push('/membres?departement=31');
+      await router.push('/membres?departement=81');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Résultat récent');
+
+      repondreAncienne(page([membre(2, { displayName: 'Résultat périmé' })]));
+      await flushPromises();
+      expect(wrapper.text()).toContain('Résultat récent');
+      expect(wrapper.text()).not.toContain('Résultat périmé');
+    });
+
     it('page au-delà de la dernière : lien vers la première page', async () => {
       vi.mocked(decouverteApi.fetchProfiles).mockResolvedValue(page([], 3, 9));
       const wrapper = await monter('/membres?page=9');
 
       expect(wrapper.text()).toContain('la liste ne compte que 1 page');
       expect(wrapper.get('.resultats a').attributes('href')).toBe('/membres');
+    });
+  });
+
+  describe('référentiel des centres d’intérêt', () => {
+    it("n'attend pas le référentiel pour afficher les membres", async () => {
+      vi.mocked(interestsApi.fetchInterests).mockReturnValue(new Promise(() => {}));
+      vi.mocked(decouverteApi.fetchProfiles).mockResolvedValue(page([membre(1)]));
+      const wrapper = await monter();
+
+      expect(wrapper.findAll('.carte-membre')).toHaveLength(1);
+      expect(wrapper.get('#filtre-interet option').text()).toBe('Chargement des centres d’intérêt…');
+    });
+
+    it("signale l'échec du référentiel, désactive le filtre et permet de réessayer", async () => {
+      vi.mocked(interestsApi.fetchInterests)
+        .mockRejectedValueOnce(new ApiError(503, 'SERVICE_UNAVAILABLE', 'Indisponible'))
+        .mockResolvedValueOnce([{ id: 1, slug: 'balade', label: 'Balade' }]);
+      vi.mocked(decouverteApi.fetchProfiles).mockResolvedValue(page([membre(1)]));
+      const wrapper = await monter();
+
+      expect(wrapper.findAll('.carte-membre')).toHaveLength(1);
+      const alerte = wrapper.get('#filtre-interet-erreur');
+      expect(alerte.attributes('role')).toBe('alert');
+      expect(alerte.text()).toContain("n'a pas pu être chargée");
+      expect((wrapper.get('#filtre-interet').element as HTMLSelectElement).disabled).toBe(true);
+      expect(wrapper.get('#filtre-interet').attributes('aria-describedby')).toBe('filtre-interet-aide filtre-interet-erreur');
+
+      await alerte.get('button').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('#filtre-interet-erreur').exists()).toBe(false);
+      expect(wrapper.findAll('#filtre-interet option').map((o) => o.text())).toEqual(["Tous les centres d'intérêt", 'Balade']);
     });
   });
 
@@ -299,6 +350,35 @@ describe("fiche d'un membre", () => {
     await flushPromises();
 
     expect(wrapper.get('h2').text()).toBe('Membre 3');
+  });
+
+  it('ouverte directement ou rechargée, la fiche garde le retour vers la même recherche', async () => {
+    vi.mocked(decouverteApi.fetchProfile).mockResolvedValue(membre(5));
+    const wrapper = await monter(`/membres/${membre(5).userId}?departement=31&page=2`);
+
+    expect(wrapper.get('.lien-retour a').attributes('href')).toBe('/membres?departement=31&page=2');
+  });
+
+  it("nettoie l'adresse de retour : impossible de renvoyer hors de la liste", async () => {
+    vi.mocked(decouverteApi.fetchProfile).mockResolvedValue(membre(5));
+    const wrapper = await monter(`/membres/${membre(5).userId}?page=//evil.example&interet=1e99&redirect=https://x.example`);
+
+    expect(wrapper.get('.lien-retour a').attributes('href')).toBe('/membres');
+  });
+
+  it("ignore une fiche arrivée en retard quand on est passé à une autre", async () => {
+    let repondreAncienne!: (p: PublicProfile) => void;
+    vi.mocked(decouverteApi.fetchProfile)
+      .mockReturnValueOnce(new Promise((ok) => (repondreAncienne = ok)))
+      .mockResolvedValueOnce(membre(9, { displayName: 'Fiche récente' }));
+    const wrapper = await monter(`/membres/${membre(8).userId}`);
+
+    await router.push(`/membres/${membre(9).userId}`);
+    await flushPromises();
+    repondreAncienne(membre(8, { displayName: 'Fiche périmée' }));
+    await flushPromises();
+
+    expect(wrapper.get('h2').text()).toBe('Fiche récente');
   });
 
   it('le lien de retour ramène à la liste avec ses filtres et sa page', async () => {
