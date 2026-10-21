@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ApiError } from '../api/http';
 import { searchCities, type CityResult } from '../api/cities';
 import { fetchInterests, type Interest } from '../api/interests';
@@ -50,6 +50,14 @@ const communeChoisie = ref<CityResult | null>(null);
 const localisationModifiee = ref(false);
 let rechercheTimer: ReturnType<typeof setTimeout> | undefined;
 let rechercheVersion = 0;
+
+function invaliderRecherche(): number {
+  clearTimeout(rechercheTimer);
+  rechercheTimer = undefined;
+  rechercheEnCours.value = false;
+  suggestions.value = [];
+  return ++rechercheVersion;
+}
 
 const resumeErreurs = ref<HTMLElement | null>(null);
 const messageSucces = ref<HTMLElement | null>(null);
@@ -131,6 +139,7 @@ const listeErreurs = computed(() =>
 const aDesErreurs = computed(() => listeErreurs.value.length > 0 || erreurGenerale.value !== null);
 
 function remplirFormulaire(p: OwnProfile): void {
+  invaliderRecherche();
   form.nomAffiche = p.displayName;
   form.presentation = p.bio ?? '';
   form.recherche = [...p.lookingFor];
@@ -138,7 +147,6 @@ function remplirFormulaire(p: OwnProfile): void {
   form.ville = p.location?.cityName ?? '';
   form.codePostal = p.location?.postalCode ?? '';
   form.departement = p.location?.departmentCode ?? '';
-  suggestions.value = [];
   communeChoisie.value = null;
   localisationModifiee.value = false;
   rechercheManuelle.value = false;
@@ -149,12 +157,11 @@ function remplirFormulaire(p: OwnProfile): void {
 function saisirVille(): void {
   localisationModifiee.value = true;
   communeChoisie.value = null;
-  suggestions.value = [];
-  clearTimeout(rechercheTimer);
-  const version = ++rechercheVersion;
+  const version = invaliderRecherche();
   const query = form.ville.trim();
   if (rechercheManuelle.value || query.length < 2) return;
   rechercheTimer = setTimeout(async () => {
+    rechercheTimer = undefined;
     rechercheEnCours.value = true;
     try {
       const resultats = await searchCities(query);
@@ -170,8 +177,7 @@ function saisirVille(): void {
 }
 
 function choisirCommune(commune: CityResult): void {
-  ++rechercheVersion;
-  suggestions.value = [];
+  invaliderRecherche();
   communeChoisie.value = commune;
   form.ville = commune.cityName;
   form.departement = commune.departmentCode;
@@ -185,9 +191,7 @@ function saisirLocalisation(): void {
 }
 
 function passerEnManuel(): void {
-  ++rechercheVersion;
-  clearTimeout(rechercheTimer);
-  suggestions.value = [];
+  invaliderRecherche();
   rechercheManuelle.value = true;
   saisirLocalisation();
 }
@@ -215,6 +219,7 @@ async function charger(): Promise<void> {
 }
 
 onMounted(charger);
+onUnmounted(invaliderRecherche);
 
 function viderErreurs(): void {
   (Object.keys(LIBELLES) as Champ[]).forEach((champ) => delete erreursChamps[champ]);

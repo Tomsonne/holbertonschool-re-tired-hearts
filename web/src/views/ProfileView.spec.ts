@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
+import { nextTick } from 'vue';
 import type { Me } from '../api/auth';
 import { ApiError } from '../api/http';
 import type { Interest } from '../api/interests';
@@ -91,6 +92,24 @@ async function envoyer(wrapper: Wrapper) {
   await flushPromises();
 }
 
+function attenteControlee<T>() {
+  let resoudre!: (value: T) => void;
+  const promise = new Promise<T>((resolve) => { resoudre = resolve; });
+  return { promise, resoudre };
+}
+
+async function demarrerRecherche(wrapper: Wrapper, ville: string) {
+  await wrapper.get('#profil-ville').setValue(ville);
+  vi.advanceTimersByTime(300);
+  await nextTick();
+}
+
+async function finirReponse() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await nextTick();
+}
+
 describe('écran « Mon profil »', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -99,6 +118,7 @@ describe('écran « Mon profil »', () => {
     vi.mocked(interestsApi.fetchInterests).mockResolvedValue(INTERETS);
   });
   afterEach(() => {
+    vi.useRealTimers();
     document.body.innerHTML = '';
   });
 
@@ -432,6 +452,101 @@ describe('écran « Mon profil »', () => {
     expect(profilApi.updateMyProfile).toHaveBeenCalledWith(expect.objectContaining({
       location: { cityName: 'Village fictif', departmentCode: '69', postalCode: null, cityCode: null, verified: false },
     }));
+  });
+
+  it.each([
+    { query: 'Seilhac', results: [
+      { cityName: 'Seilhac', departmentCode: '19', postalCodes: ['19700'], cityCode: '19255' },
+    ], expected: { cityName: 'Seilhac', departmentCode: '19', postalCode: '19700', cityCode: '19255', verified: true } },
+    { query: 'Tulle', results: [
+      { cityName: 'Tulle', departmentCode: '19', postalCodes: ['19000'], cityCode: '19272' },
+      { cityName: 'Sainte-Tulle', departmentCode: '04', postalCodes: ['04220'], cityCode: '04197' },
+    ], expected: { cityName: 'Tulle', departmentCode: '19', postalCode: '19000', cityCode: '19272', verified: true } },
+  ])('affiche et enregistre $query en Corrèze depuis une réponse simulée', async ({ query, results, expected }) => {
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockResolvedValue(results);
+    vi.mocked(profilApi.updateMyProfile).mockResolvedValue(profilVide());
+    const wrapper = await monter();
+    vi.useFakeTimers();
+    await demarrerRecherche(wrapper, query);
+    await finirReponse();
+    const buttons = wrapper.findAll('[aria-label="Communes proposées"] button');
+    expect(buttons.map((button) => button.text())).toContain(`${query} (19) — ${expected.postalCode}`);
+    if (query === 'Tulle') expect(buttons.map((button) => button.text())).toContain('Sainte-Tulle (04) — 04220');
+    await buttons.find((button) => button.text().startsWith(`${query} (19)`))!.trigger('click');
+    expect((wrapper.get('#profil-ville').element as HTMLInputElement).value).toBe(query);
+    expect((wrapper.get('#profil-departement').element as HTMLInputElement).value).toBe('19');
+    vi.useRealTimers();
+    await envoyer(wrapper);
+    expect(profilApi.updateMyProfile).toHaveBeenCalledWith(expect.objectContaining({ location: expected }));
+  });
+
+  it('termine le chargement immédiatement en saisie manuelle et ignore la réponse ancienne', async () => {
+    const pending = attenteControlee<Awaited<ReturnType<typeof citiesApi.searchCities>>>();
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockReturnValue(pending.promise);
+    vi.mocked(profilApi.updateMyProfile).mockResolvedValue(profilVide());
+    const wrapper = await monter();
+    vi.useFakeTimers();
+    await demarrerRecherche(wrapper, 'Sei');
+    expect(wrapper.text()).toContain('Recherche de communes…');
+    await wrapper.findAll('button').find((button) => button.text() === 'Saisir ma ville manuellement')!.trigger('click');
+    expect(wrapper.text()).not.toContain('Recherche de communes…');
+    await wrapper.get('#profil-ville').setValue('Seilhac');
+    await wrapper.get('#profil-departement').setValue('19');
+    pending.resoudre([{ cityName: 'Seilhac', departmentCode: '19', postalCodes: ['19700'], cityCode: '19255' }]);
+    await finirReponse();
+    expect(wrapper.find('[aria-label="Communes proposées"]').exists()).toBe(false);
+    expect((wrapper.get('#profil-ville').element as HTMLInputElement).value).toBe('Seilhac');
+    vi.useRealTimers();
+    await envoyer(wrapper);
+    expect(profilApi.updateMyProfile).toHaveBeenCalledWith(expect.objectContaining({
+      location: { cityName: 'Seilhac', departmentCode: '19', postalCode: null, cityCode: null, verified: false },
+    }));
+  });
+
+  it('efface le chargement si la saisie redescend sous deux caractères', async () => {
+    const pending = attenteControlee<Awaited<ReturnType<typeof citiesApi.searchCities>>>();
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockReturnValue(pending.promise);
+    const wrapper = await monter();
+    vi.useFakeTimers();
+    await demarrerRecherche(wrapper, 'Sei');
+    expect(wrapper.text()).toContain('Recherche de communes…');
+    await wrapper.get('#profil-ville').setValue('S');
+    expect(wrapper.text()).not.toContain('Recherche de communes…');
+    pending.resoudre([{ cityName: 'Seilhac', departmentCode: '19', postalCodes: ['19700'], cityCode: '19255' }]);
+    await finirReponse();
+    expect(wrapper.find('[aria-label="Communes proposées"]').exists()).toBe(false);
+  });
+
+  it('une réponse ancienne ne change pas le chargement ni les suggestions de la recherche suivante', async () => {
+    const first = attenteControlee<Awaited<ReturnType<typeof citiesApi.searchCities>>>();
+    const second = attenteControlee<Awaited<ReturnType<typeof citiesApi.searchCities>>>();
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const wrapper = await monter();
+    vi.useFakeTimers();
+    await demarrerRecherche(wrapper, 'Sei');
+    await demarrerRecherche(wrapper, 'Tul');
+    first.resoudre([{ cityName: 'Seilhac', departmentCode: '19', postalCodes: ['19700'], cityCode: '19255' }]);
+    await finirReponse();
+    expect(wrapper.text()).toContain('Recherche de communes…');
+    expect(wrapper.find('[aria-label="Communes proposées"]').exists()).toBe(false);
+    second.resoudre([{ cityName: 'Tulle', departmentCode: '19', postalCodes: ['19000'], cityCode: '19272' }]);
+    await finirReponse();
+    expect(wrapper.text()).not.toContain('Recherche de communes…');
+    expect(wrapper.get('[aria-label="Communes proposées"]').text()).toContain('Tulle (19)');
+  });
+
+  it('nettoie la temporisation de recherche au démontage', async () => {
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    const wrapper = await monter();
+    vi.useFakeTimers();
+    await wrapper.get('#profil-ville').setValue('Sei');
+    wrapper.unmount();
+    vi.advanceTimersByTime(300);
+    expect(citiesApi.searchCities).not.toHaveBeenCalled();
   });
 
   it('un visiteur non connecté est envoyé vers la connexion, puis reviendra ici', async () => {

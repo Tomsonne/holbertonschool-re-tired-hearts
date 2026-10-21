@@ -27,6 +27,26 @@ describe('CitiesService', () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain('limit=8');
   });
 
+  it.each([
+    { query: 'Seilhac', providerResponse: [
+      { nom: 'Seilhac', code: '19255', codeDepartement: '19', codesPostaux: ['19700'] },
+    ], expected: { cityName: 'Seilhac', cityCode: '19255', departmentCode: '19', postalCodes: ['19700'] } },
+    { query: 'Tulle', providerResponse: [
+      { nom: 'Tulle', code: '19272', codeDepartement: '19', codesPostaux: ['19000'] },
+      { nom: 'Sainte-Tulle', code: '04197', codeDepartement: '04', codesPostaux: ['04220'] },
+    ], expected: { cityName: 'Tulle', cityCode: '19272', departmentCode: '19', postalCodes: ['19000'] } },
+  ])('transforme la réponse simulée pour $query', async ({ query, providerResponse, expected }) => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => providerResponse });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const cities = await service.search(query);
+    expect(cities[0]).toEqual(expected);
+    if (query === 'Tulle') expect(cities[1]).toMatchObject({ cityName: 'Sainte-Tulle', departmentCode: '04' });
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get('nom')).toBe(query);
+    expect(url.searchParams.get('fields')).toBe('nom,code,codeDepartement,codesPostaux');
+    expect(url.searchParams.get('limit')).toBe('8');
+  });
+
   it('rejette une réponse invalide sans la cacher', async () => {
     const fetchMock = jest.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => [{ ...providerCity, codesPostaux: ['invalide'] }] })
