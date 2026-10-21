@@ -402,11 +402,13 @@ describe('Issue #23 — modération et journal d’audit (bout en bout)', () => 
       }
     });
 
-    it('aucune route de conversation ou de message n’est servie, même au modérateur', async () => {
+    it('un modérateur ne voit que sa boîte vide et aucune route de modération de la messagerie', async () => {
       const mod = await seed({ role: UserRole.Moderator });
       const id = '11111111-1111-4111-8111-111111111111';
+      const inbox = await http().get('/api/conversations').set('Cookie', mod.cookie);
+      expect(inbox.status).toBe(200);
+      expect(inbox.body).toEqual([]);
       for (const path of [
-        '/api/conversations',
         `/api/conversations/${id}`,
         `/api/conversations/${id}/messages`,
         '/api/moderation/conversations',
@@ -415,6 +417,9 @@ describe('Issue #23 — modération et journal d’audit (bout en bout)', () => 
       ]) {
         const response = await http().get(path).set('Cookie', mod.cookie);
         expect(response.status).toBe(404);
+        if (path.startsWith('/api/conversations/')) {
+          expect(response.body.code).toBe('CONVERSATION_NOT_FOUND');
+        }
       }
     });
 

@@ -1,9 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { isUUID } from 'class-validator';
+import { DataSource, EntityManager } from 'typeorm';
 import { AppException } from '../common/app.exception';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { Conversation } from './conversation.entity';
+import { Message, MESSAGE_MAX_LENGTH } from './message.entity';
 
 @Injectable()
 export class ConversationsService {
@@ -100,5 +102,151 @@ export class ConversationsService {
       cannotSendReason: null,
       createdAt: conversation.createdAt,
     };
+  }
+
+  private async requireParticipant(manager: EntityManager, actorId: string, id: string): Promise<Conversation> {
+    const conversation = await manager.findOneBy(Conversation, { id });
+    if (!conversation || (conversation.participantAId !== actorId && conversation.participantBId !== actorId)) {
+      throw new AppException(HttpStatus.NOT_FOUND, 'CONVERSATION_NOT_FOUND', 'Cette conversation est indisponible.');
+    }
+    return conversation;
+  }
+
+  async assertParticipant(actorId: string, id: string): Promise<void> {
+    await this.requireParticipant(this.db.manager, actorId, id);
+  }
+
+  async detail(actorId: string, id: string): Promise<object> {
+    const conversation = await this.requireParticipant(this.db.manager, actorId, id);
+    const otherId = conversation.participantAId === actorId ? conversation.participantBId : conversation.participantAId;
+    const [actorProfile, other, otherProfile] = await Promise.all([
+      this.db.manager.findOneBy(Profile, { userId: actorId }),
+      this.db.manager.findOneByOrFail(User, { id: otherId }),
+      this.db.manager.findOneByOrFail(Profile, { userId: otherId }),
+    ]);
+    const available = other.status === AccountStatus.Active && otherProfile.status === ProfileStatus.Approved;
+    const canSend = actorProfile?.status === ProfileStatus.Approved && actorProfile.allowMessages &&
+      available && otherProfile.allowMessages;
+    const result = await this.present(conversation, other, otherProfile) as Record<string, unknown>;
+    return {
+      ...result,
+      otherParticipant: {
+        userId: otherId,
+        displayName: available ? otherProfile.displayName : 'Membre indisponible',
+        isOrganizer: other.role === UserRole.Organizer,
+        available,
+      },
+      canSend: Boolean(canSend),
+      cannotSendReason: canSend ? null : !available ? 'RECIPIENT_UNAVAILABLE'
+        : !actorProfile?.allowMessages || !otherProfile.allowMessages ? 'MESSAGING_DISABLED' : 'PROFILE_NOT_APPROVED',
+    };
+  }
+
+  async list(actorId: string): Promise<object[]> {
+    const conversations = await this.db.manager.createQueryBuilder(Conversation, 'conversation')
+      .where('conversation.participantAId = :actorId OR conversation.participantBId = :actorId', { actorId })
+      .orderBy('COALESCE(conversation.lastMessageAt, conversation.createdAt)', 'DESC')
+      .addOrderBy('conversation.id', 'DESC')
+      .getMany();
+    return Promise.all(conversations.map(async (conversation) => {
+      const latest = await this.db.manager.findOne(Message, {
+        where: { conversationId: conversation.id },
+        order: { createdAt: 'DESC', id: 'DESC' },
+      });
+      return {
+        ...await this.detail(actorId, conversation.id),
+        lastMessage: latest ? {
+          body: latest.body,
+          sentByMe: latest.senderId === actorId,
+          createdAt: latest.createdAt,
+        } : null,
+      };
+    }));
+  }
+
+  async messages(actorId: string, id: string, before?: string, limit = 50): Promise<object[]> {
+    await this.requireParticipant(this.db.manager, actorId, id);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'La limite demandée est invalide.');
+    }
+    // Un curseur étranger à cette conversation laissait la sous-requête du filtre sans
+    // ligne : la comparaison devenait NULL, la page revenait vide et la route répondait
+    // 200 au lieu du 400 annoncé (docs/contrats-api.md).
+    const cursor = before ?? undefined;
+    if (cursor !== undefined) {
+      const known = isUUID(cursor) && await this.db.manager.countBy(Message, {
+        id: cursor, conversationId: id,
+      }) > 0;
+      if (!known) {
+        throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Le curseur de pagination est invalide.');
+      }
+    }
+    const rows: { id: string; body: string; sender_id: string; display_name: string;
+      user_status: AccountStatus; profile_status: ProfileStatus; created_at: Date }[] = await this.db.query(`
+      SELECT m.id, m.body, m.sender_id, m.created_at, p.display_name,
+        u.status AS user_status, p.status AS profile_status
+      FROM messages m
+      JOIN users u ON u.id = m.sender_id
+      JOIN profiles p ON p.user_id = m.sender_id
+      WHERE m.conversation_id = $1
+        AND ($2::uuid IS NULL OR (m.created_at, m.id) < (
+          SELECT cursor.created_at, cursor.id FROM messages cursor
+          WHERE cursor.id = $2::uuid AND cursor.conversation_id = $1
+        ))
+      ORDER BY m.created_at DESC, m.id DESC
+      LIMIT $3
+    `, [id, cursor ?? null, limit]);
+    return rows.reverse().map((row) => ({
+      id: row.id,
+      body: row.body,
+      sentByMe: row.sender_id === actorId,
+      senderDisplayName: row.user_status === AccountStatus.Active && row.profile_status === ProfileStatus.Approved
+        ? row.display_name : 'Membre indisponible',
+      createdAt: row.created_at,
+    }));
+  }
+
+  async send(actorId: string, id: string, rawBody: string): Promise<object> {
+    return this.db.transaction(async (manager) => {
+      const conversation = await this.requireParticipant(manager, actorId, id);
+      // La base répète la limite ; ce nettoyage précède la mesure et le stockage.
+      const body = typeof rawBody === 'string' ? rawBody.replace(/\s+/gu, ' ').trim() : '';
+      if (Array.from(body).length < 1 || Array.from(body).length > MESSAGE_MAX_LENGTH) {
+        throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Le message doit contenir de 1 à 1000 caractères.');
+      }
+      const otherId = conversation.participantAId === actorId ? conversation.participantBId : conversation.participantAId;
+      const actor = await manager.findOneBy(User, { id: actorId });
+      const actorProfile = await manager.findOneBy(Profile, { userId: actorId });
+      const other = await manager.findOneBy(User, { id: otherId });
+      const otherProfile = await manager.findOneBy(Profile, { userId: otherId });
+      if (!actor || actor.status !== AccountStatus.Active) {
+        throw new AppException(HttpStatus.FORBIDDEN, 'ACCOUNT_SUSPENDED', 'Ce compte ne peut pas envoyer de message.');
+      }
+      if (!actorProfile || actorProfile.status !== ProfileStatus.Approved) {
+        throw new AppException(HttpStatus.FORBIDDEN, 'PROFILE_NOT_APPROVED', 'Votre profil doit être approuvé pour écrire.');
+      }
+      if (!other || other.status !== AccountStatus.Active ||
+          !otherProfile || otherProfile.status !== ProfileStatus.Approved) {
+        throw new AppException(HttpStatus.CONFLICT, 'RECIPIENT_UNAVAILABLE', 'Ce membre ne peut pas recevoir de message.');
+      }
+      if (!actorProfile.allowMessages || !otherProfile.allowMessages) {
+        throw new AppException(HttpStatus.CONFLICT, 'MESSAGING_DISABLED', 'Les messages privés ne sont pas acceptés.');
+      }
+      const message = await manager.save(manager.create(Message, {
+        conversationId: id, senderId: actorId, body,
+      }));
+      await manager.query(`
+        UPDATE conversations
+        SET last_message_at = GREATEST(COALESCE(last_message_at, $2::timestamptz), $2::timestamptz)
+        WHERE id = $1
+      `, [id, message.createdAt]);
+      return {
+        id: message.id,
+        body: message.body,
+        sentByMe: true,
+        senderDisplayName: actorProfile.displayName,
+        createdAt: message.createdAt,
+      };
+    });
   }
 }
