@@ -37,7 +37,8 @@ function heure(date: Date): string {
   const parties = formatHeure.formatToParts(date);
   const h = Number(parties.find((p) => p.type === 'hour')?.value);
   const m = parties.find((p) => p.type === 'minute')?.value ?? '00';
-  return m === '00' ? `${h} h` : `${h} h ${m}`;
+  // Espaces insécables : « 14 h 30 » ne doit jamais être coupé en fin de ligne.
+  return m === '00' ? `${h}\u00a0h` : `${h}\u00a0h\u00a0${m}`;
 }
 
 const majuscule = (texte: string) => texte.charAt(0).toUpperCase() + texte.slice(1);

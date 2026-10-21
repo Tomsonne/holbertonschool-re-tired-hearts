@@ -65,3 +65,6 @@ export const publier = (id: string) => apiPost<EventDetail>(`${chemin(id)}/publi
 export const annuler = (id: string, reason: string) => apiPost<EventDetail>(`${chemin(id)}/cancel`, { reason });
 export const cloturer = (id: string) => apiPost<EventDetail>(`${chemin(id)}/complete`);
 export const supprimer = (id: string) => apiDelete<void>(chemin(id));
+
+// Toutes les sorties de l'organisateur connecté, tous statuts (brouillons compris), sans pagination.
+export const fetchMesSorties = () => apiGet<EventSummary[]>('/me/organized-events');

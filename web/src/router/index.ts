@@ -50,6 +50,14 @@ export const router = createRouter({
       component: () => import('../views/EventsView.vue'),
       meta: { title: 'Les sorties', connexionRequise: true },
     },
+    // Réservée aux organisateurs : l'écran l'explique lui-même, l'API refuse aussi (ROLE_REQUIRED).
+    // Déclarée avant /sorties/:eventId par lisibilité (les chemins ne se recouvrent pas).
+    {
+      path: '/mes-sorties',
+      name: 'mes-sorties',
+      component: () => import('../views/MesSortiesView.vue'),
+      meta: { title: 'Mes sorties', connexionRequise: true },
+    },
     {
       path: '/sorties/:eventId',
       name: 'sortie',

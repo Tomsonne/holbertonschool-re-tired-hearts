@@ -871,6 +871,24 @@ a.bouton {
   margin-bottom: 1rem;
 }
 
+.groupe-sorties {
+  margin-top: 2rem;
+}
+
+.groupe-sorties h3 {
+  margin-bottom: 0.2rem;
+}
+
+.groupe-sorties .champ__aide {
+  margin: 0 0 1rem;
+}
+
+.badge--a-cloturer {
+  border-color: var(--vert);
+  background: var(--vert-clair);
+  color: var(--vert-fonce);
+}
+
 .badge--brouillon {
   border-style: dashed;
   border-color: var(--encre-douce);

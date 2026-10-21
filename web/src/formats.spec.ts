@@ -1,26 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { etatSortie, formaterHoraire, formaterPlaces } from './formats';
 
+// Les heures utilisent des espaces insécables ; on les rend visibles pour comparer.
+const lisible = (texte: string) => texte.replace(/\u00a0/g, ' ');
+
 describe('formats des sorties', () => {
   it("écrit la date et les heures à la française, à l'heure de Paris", () => {
     // 13 h 30 UTC en novembre = 14 h 30 à Paris (heure d'hiver).
-    expect(formaterHoraire('2026-11-14T13:30:00.000Z', '2026-11-14T16:00:00.000Z')).toBe(
+    expect(lisible(formaterHoraire('2026-11-14T13:30:00.000Z', '2026-11-14T16:00:00.000Z'))).toBe(
       'Samedi 14 novembre 2026, de 14 h 30 à 17 h',
     );
     // 8 h UTC en juin = 10 h à Paris (heure d'été).
-    expect(formaterHoraire('2027-06-05T08:00:00.000Z', '2027-06-05T10:15:00.000Z')).toBe(
+    expect(lisible(formaterHoraire('2027-06-05T08:00:00.000Z', '2027-06-05T10:15:00.000Z'))).toBe(
       'Samedi 5 juin 2027, de 10 h à 12 h 15',
     );
   });
 
   it('précise les deux jours quand la sortie dure plus d’une journée', () => {
-    expect(formaterHoraire('2026-11-14T08:00:00.000Z', '2026-11-15T11:00:00.000Z')).toBe(
+    expect(lisible(formaterHoraire('2026-11-14T08:00:00.000Z', '2026-11-15T11:00:00.000Z'))).toBe(
       'Du samedi 14 novembre 2026 à 9 h au dimanche 15 novembre 2026 à 12 h',
     );
   });
 
   it('ne casse pas sur une date illisible', () => {
-    expect(formaterHoraire('pas une date', '2026-11-14T16:00:00.000Z')).toBe('');
+    expect(lisible(formaterHoraire('pas une date', '2026-11-14T16:00:00.000Z'))).toBe('');
   });
 
   it('accorde les places restantes', () => {

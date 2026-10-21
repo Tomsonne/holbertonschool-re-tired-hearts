@@ -68,6 +68,7 @@ async function monter() {
       { path: '/connexion', name: 'connexion', component: vide },
       { path: '/mon-profil', name: 'mon-profil', component: vide },
       { path: '/membres/:userId', name: 'membre', component: vide },
+      { path: '/mes-sorties', name: 'mes-sorties', component: vide },
       { path: '/sorties', name: 'sorties', component: vide },
       { path: '/sorties/:eventId', name: 'sortie', component: EventView, meta: { connexionRequise: true } },
     ],
@@ -170,6 +171,7 @@ describe('panneau « Gérer cette sortie »', () => {
       const fin = wrapper.get('#titre-sortie-supprimee').element.closest('section')!;
       expect(fin.textContent).toContain('Le brouillon « Balade au Jardin des Plantes » a été supprimé.');
       expect(document.activeElement).toBe(fin);
+      expect(fin.querySelector('a')?.getAttribute('href')).toBe('/mes-sorties');
       expect(wrapper.find('.fiche-sortie').exists()).toBe(false);
     });
 

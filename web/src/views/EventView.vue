@@ -32,7 +32,10 @@ const boutonDesinscription = ref<HTMLButtonElement | null>(null);
 
 // Retour à la liste avec ses filtres : la fiche les garde dans sa propre adresse
 // (/sorties/:id?departement=31), relus et nettoyés comme sur la fiche d'un membre.
-const retourListe = computed(() => ({ name: 'sorties', query: versQuery(lireFiltres(route.query)) }));
+const depuisMesSorties = computed(() => route.query.depuis === 'mes-sorties');
+const retourListe = computed(() =>
+  depuisMesSorties.value ? { name: 'mes-sorties' } : { name: 'sorties', query: versQuery(lireFiltres(route.query)) },
+);
 // Une fiche demandée avant une autre (ou relue après une action) ne doit pas l'écraser.
 let derniereRequete = 0;
 const identifiant = () => String(route.params.eventId);
@@ -221,7 +224,9 @@ watch(() => route.params.eventId, (id) => id && charger());
 </script>
 
 <template>
-  <p class="lien-retour"><RouterLink :to="retourListe">← Retour à la liste des sorties</RouterLink></p>
+  <p class="lien-retour">
+    <RouterLink :to="retourListe">{{ depuisMesSorties ? '← Retour à mes sorties' : '← Retour à la liste des sorties' }}</RouterLink>
+  </p>
 
   <SortiesInaccessibles v-if="accesRefuse" :raison="accesRefuse" />
 
@@ -248,7 +253,7 @@ watch(() => route.params.eventId, (id) => id && charger());
   >
     <h2 id="titre-sortie-supprimee">Brouillon supprimé</h2>
     <p>Le brouillon « {{ titreSupprime }} » a été supprimé.</p>
-    <p><RouterLink :to="{ name: 'sorties' }">Voir les sorties à venir</RouterLink></p>
+    <p><RouterLink :to="{ name: 'mes-sorties' }">Voir mes sorties</RouterLink></p>
   </section>
 
   <article v-else-if="sortie" class="fiche-sortie" aria-labelledby="titre-sortie">

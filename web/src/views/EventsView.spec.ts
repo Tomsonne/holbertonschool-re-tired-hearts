@@ -84,6 +84,7 @@ async function monter(chemin: string) {
       { path: '/connexion', name: 'connexion', component: vide },
       { path: '/mon-profil', name: 'mon-profil', component: vide },
       { path: '/membres/:userId', name: 'membre', component: vide },
+      { path: '/mes-sorties', name: 'mes-sorties', component: vide },
       { path: '/sorties', name: 'sorties', component: EventsView, meta: { connexionRequise: true } },
       { path: '/sorties/:eventId', name: 'sortie', component: EventView, meta: { connexionRequise: true } },
     ],
