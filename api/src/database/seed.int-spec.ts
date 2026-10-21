@@ -18,6 +18,7 @@ describe('seed complet (PostgreSQL jetable)', () => {
   let admin: InstanceType<typeof Client>;
   let db: DataSource;
   let name: string;
+  let gate: InstanceType<typeof Client> | null = null;
   const password = 'MotDePasseDemo2026!';
 
   beforeEach(async () => {
@@ -38,6 +39,11 @@ describe('seed complet (PostgreSQL jetable)', () => {
   });
 
   afterEach(async () => {
+    // La connexion tierce est libérée avant tout le reste, même si un test a échoué en la retenant.
+    if (gate) {
+      await gate.end().catch(() => undefined);
+      gate = null;
+    }
     if (db?.isInitialized) await db.destroy();
     if (admin) {
       if (name) await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
@@ -166,8 +172,10 @@ describe('seed complet (PostgreSQL jetable)', () => {
     expect(await db.manager.count(Conversation)).toBe(2);
   });
 
-  it('partage le verrou de sortie avec une inscription ordinaire concurrente', async () => {
-    const { demoMembers } = await occupyFirstEvent(1);
+  // Une seule place libre sur la première sortie : le seed en réclame deux, l'inscription
+  // ordinaire une seule. Les deux ne peuvent donc pas réussir ensemble.
+  async function prepareContender() {
+    const { demoMembers, foreignIds } = await occupyFirstEvent(1);
     const other = await db.manager.save(db.manager.create(User, {
       email: `${randomUUID()}@example.test`, passwordHash: 'integration-test-only',
       role: UserRole.Member, status: AccountStatus.Active,
@@ -176,18 +184,159 @@ describe('seed complet (PostgreSQL jetable)', () => {
       userId: other.id, displayName: 'Membre concurrent', cityName: 'Lyon',
       departmentCode: '69', status: ProfileStatus.Approved,
     }));
-    const results = await Promise.allSettled([
-      seedDemoData(db, password),
-      new RegistrationsService(db).register(other.id, DEMO_EVENTS[0].id),
-    ]);
-    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-    const registrations = await db.manager.findBy(EventRegistration, {
+    return { demoMembers, foreignIds, other };
+  }
+
+  type Contenders = Awaited<ReturnType<typeof prepareContender>>;
+  type Outcome<T> = { ok: true; value: T } | { ok: false; error: unknown };
+
+  // Le gestionnaire est attaché dès l'appel : une opération refusée pendant que le test
+  // attend le verrou ne remonte jamais comme rejet non traité.
+  function settle<T>(operation: Promise<T>): Promise<Outcome<T>> {
+    return operation.then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+  }
+
+  function rejection(outcome: Outcome<unknown>): unknown {
+    if (outcome.ok) throw new Error('Opération attendue en échec : elle a réussi.');
+    return outcome.error;
+  }
+
+  // Retient le verrou d'écriture de la sortie depuis une connexion tierce : les deux
+  // opérations s'alignent derrière lui dans leur ordre d'arrivée.
+  async function holdEventLock(): Promise<void> {
+    gate = new Client({
+      host: process.env.DATABASE_HOST ?? 'localhost',
+      port: Number(process.env.DATABASE_PORT ?? 5442),
+      user: process.env.DATABASE_USER ?? 'rth',
+      password: process.env.DATABASE_PASSWORD,
+      database: name,
+    });
+    await gate.connect();
+    await gate.query('BEGIN');
+    await gate.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [DEMO_EVENTS[0].id]);
+  }
+
+  async function releaseEventLock(): Promise<void> {
+    if (!gate) return;
+    const held = gate;
+    gate = null;
+    await held.query('ROLLBACK');
+    await held.end();
+  }
+
+  // PostgreSQL sert la file d'attente d'un verrou de ligne dans l'ordre d'arrivée :
+  // attendre qu'une opération y patiente avant de lancer la suivante fixe l'ordre.
+  async function waitForLockWaiters(expected: number): Promise<void> {
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const { rows } = await admin.query(
+        `SELECT count(*)::int AS waiting FROM pg_stat_activity
+           WHERE datname = $1 AND wait_event_type = 'Lock'`,
+        [name],
+      );
+      if (rows[0].waiting >= expected) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`Verrou de sortie : ${expected} opération(s) en attente jamais observée(s).`);
+  }
+
+  // Le seed a gagné : il complète la sortie avec ses deux membres et l'inscription
+  // ordinaire est refusée faute de place.
+  async function expectSeedWon(
+    contenders: Contenders,
+    seed: Outcome<string[]>,
+    registration: Outcome<unknown>,
+  ): Promise<void> {
+    expect(seed).toEqual({ ok: true, value: [] });
+    expect(rejection(registration)).toMatchObject({ response: { code: 'EVENT_FULL' } });
+    const event = await db.manager.findOneByOrFail(Event, { id: DEMO_EVENTS[0].id });
+    expect(event.capacity).toBe(3);
+    const registered = await db.manager.findBy(EventRegistration, {
       eventId: DEMO_EVENTS[0].id, status: RegistrationStatus.Registered,
     });
-    expect(registrations).toHaveLength(3);
-    const demoCount = registrations.filter((row) => demoMembers.some((member) => member.id === row.userId)).length;
-    expect([0, 2]).toContain(demoCount);
-    expect(registrations.length).toBeLessThanOrEqual((await db.manager.findOneByOrFail(Event, { id: DEMO_EVENTS[0].id })).capacity);
+    expect(registered).toHaveLength(3);
+    expect(registered.length).toBeLessThanOrEqual(event.capacity);
+    expect(registered.map((row) => row.userId).sort()).toEqual(
+      [...contenders.foreignIds, ...contenders.demoMembers.map((member) => member.id)].sort(),
+    );
+    // Le membre concurrent n'a aucune ligne, pas même une ligne retirée.
+    expect(await db.manager.countBy(EventRegistration, {
+      eventId: DEMO_EVENTS[0].id, userId: contenders.other.id,
+    })).toBe(0);
+    // Les deux membres inscrits rendent les deux conversations de démonstration éligibles.
+    expect(await db.manager.count(Conversation)).toBe(2);
+    expect(await db.manager.countBy(EventRegistration, {
+      eventId: DEMO_EVENTS[1].id, status: RegistrationStatus.Registered,
+    })).toBe(2);
+  }
+
+  // L'inscription ordinaire a gagné : le seed refuse ses deux ajouts faute de place et ne
+  // laisse aucune inscription partielle derrière lui.
+  async function expectRegistrationWon(
+    contenders: Contenders,
+    seed: Outcome<string[]>,
+    registration: Outcome<{ status: RegistrationStatus.Registered; availablePlaces: number }>,
+  ): Promise<void> {
+    expect(registration).toEqual({
+      ok: true, value: { status: RegistrationStatus.Registered, availablePlaces: 1 },
+    });
+    expect(rejection(seed)).toMatchObject({ message: expect.stringContaining('places insuffisantes') });
+    const event = await db.manager.findOneByOrFail(Event, { id: DEMO_EVENTS[0].id });
+    expect(event.capacity).toBe(3);
+    const registered = await db.manager.findBy(EventRegistration, {
+      eventId: DEMO_EVENTS[0].id, status: RegistrationStatus.Registered,
+    });
+    expect(registered).toHaveLength(2);
+    expect(registered.length).toBeLessThanOrEqual(event.capacity);
+    expect(registered.map((row) => row.userId).sort()).toEqual(
+      [...contenders.foreignIds, contenders.other.id].sort(),
+    );
+    // Aucune inscription partielle : ni l'un ni l'autre des deux membres de démonstration.
+    for (const member of contenders.demoMembers) {
+      expect(await db.manager.countBy(EventRegistration, {
+        eventId: DEMO_EVENTS[0].id, userId: member.id,
+      })).toBe(0);
+    }
+    // Le seed s'arrête avant les conversations et ne touche pas la seconde sortie.
+    expect(await db.manager.count(Conversation)).toBe(0);
+    expect(await db.manager.countBy(EventRegistration, {
+      eventId: DEMO_EVENTS[1].id, status: RegistrationStatus.Registered,
+    })).toBe(2);
+  }
+
+  it('complète la sortie quand le seed obtient le verrou avant l’inscription ordinaire', async () => {
+    const contenders = await prepareContender();
+    await holdEventLock();
+    const seed = settle(seedDemoData(db, password));
+    await waitForLockWaiters(1);
+    const registration = settle(new RegistrationsService(db).register(contenders.other.id, DEMO_EVENTS[0].id));
+    await waitForLockWaiters(2);
+    await releaseEventLock();
+    await expectSeedWon(contenders, await seed, await registration);
+  });
+
+  it('refuse les deux ajouts du seed quand l’inscription ordinaire obtient le verrou avant lui', async () => {
+    const contenders = await prepareContender();
+    await holdEventLock();
+    const registration = settle(new RegistrationsService(db).register(contenders.other.id, DEMO_EVENTS[0].id));
+    await waitForLockWaiters(1);
+    const seed = settle(seedDemoData(db, password));
+    await waitForLockWaiters(2);
+    await releaseEventLock();
+    await expectRegistrationWon(contenders, await seed, await registration);
+  });
+
+  it('partage le verrou de sortie avec une inscription ordinaire concurrente', async () => {
+    const contenders = await prepareContender();
+    const seed = settle(seedDemoData(db, password));
+    const registration = settle(new RegistrationsService(db).register(contenders.other.id, DEMO_EVENTS[0].id));
+    const [seedOutcome, registrationOutcome] = await Promise.all([seed, registration]);
+    expect([seedOutcome, registrationOutcome].filter((outcome) => outcome.ok)).toHaveLength(1);
+    // L'ordre réel n'est pas imposé ici : chaque issue est vérifiée en entier selon le gagnant.
+    if (seedOutcome.ok) await expectSeedWon(contenders, seedOutcome, registrationOutcome);
+    else await expectRegistrationWon(contenders, seedOutcome, registrationOutcome);
   });
 
   it('ne réactive pas une inscription retirée et ne recrée pas une conversation inéligible', async () => {
