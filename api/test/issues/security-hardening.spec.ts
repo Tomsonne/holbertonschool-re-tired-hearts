@@ -2,6 +2,8 @@ import { ConfigService } from '@nestjs/config';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import express from 'express';
+import request from 'supertest';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { DataSource, Repository } from 'typeorm';
 import { configureApp } from '../../src/app.setup';
 import { AuthController } from '../../src/auth/auth.controller';
@@ -12,6 +14,18 @@ import { Profile, ProfileStatus } from '../../src/profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../../src/users/user.entity';
 
 describe('Revue OWASP — correctifs des constats 1 à 3', () => {
+  function appWith(): { app: unknown; expressApp: express.Express } {
+    const expressApp = express();
+    const app = {
+      setGlobalPrefix: jest.fn(),
+      use: (...handlers: express.RequestHandler[]) => expressApp.use(...handlers),
+      useGlobalPipes: jest.fn(),
+      useGlobalFilters: jest.fn(),
+      getHttpAdapter: () => ({ getInstance: () => expressApp }),
+    };
+    return { app, expressApp };
+  }
+
   describe('constat 1 : temps de réponse de la connexion', () => {
     const userQuery = { addSelect: jest.fn(), where: jest.fn(), getOne: jest.fn() };
     userQuery.addSelect.mockReturnValue(userQuery);
@@ -60,10 +74,16 @@ describe('Revue OWASP — correctifs des constats 1 à 3', () => {
 
   describe('constat 2 : limitation de débit', () => {
     const limitOf = (handler: object): number | undefined => Reflect.getMetadata('THROTTLER:LIMITdefault', handler);
+    const ttlOf = (handler: object): number | undefined => Reflect.getMetadata('THROTTLER:TTLdefault', handler);
+    const guardsOf = (handler: object): unknown[] => Reflect.getMetadata('__guards__', handler) ?? [];
 
     it('limite l’inscription et la connexion', () => {
       expect(limitOf(AuthController.prototype.register)).toBe(10);
+      expect(ttlOf(AuthController.prototype.register)).toBe(3_600_000);
+      expect(guardsOf(AuthController.prototype.register)).toContain(ThrottlerGuard);
       expect(limitOf(AuthController.prototype.login)).toBe(5);
+      expect(ttlOf(AuthController.prototype.login)).toBe(900_000);
+      expect(guardsOf(AuthController.prototype.login)).toContain(ThrottlerGuard);
     });
 
     it('limite la découverte des profils', () => {
@@ -72,18 +92,6 @@ describe('Revue OWASP — correctifs des constats 1 à 3', () => {
   });
 
   describe('constat 2 bis : confiance envers le proxy', () => {
-    function appWith(): { app: unknown; expressApp: express.Express } {
-      const expressApp = express();
-      const app = {
-        setGlobalPrefix: jest.fn(),
-        use: jest.fn(),
-        useGlobalPipes: jest.fn(),
-        useGlobalFilters: jest.fn(),
-        getHttpAdapter: () => ({ getInstance: () => expressApp }),
-      };
-      return { app, expressApp };
-    }
-
     function clientIp(expressApp: express.Express, forwardedFor: string, socketIp: string): string {
       const request = Object.assign(Object.create(expressApp.request), {
         headers: { 'x-forwarded-for': forwardedFor },
@@ -105,6 +113,19 @@ describe('Revue OWASP — correctifs des constats 1 à 3', () => {
       const { app, expressApp } = appWith();
       configureApp(app as unknown as INestApplication, { swagger: false });
       expect(clientIp(expressApp, '6.6.6.6', '198.51.100.7')).toBe('198.51.100.7');
+    });
+  });
+
+  describe('constat 2 ter : en-têtes de sécurité', () => {
+    it('configure Helmet et envoie ses en-têtes sur les réponses', async () => {
+      const { app, expressApp } = appWith();
+      configureApp(app as unknown as INestApplication, { swagger: false });
+      expressApp.get('/probe', (_request, response) => response.sendStatus(204));
+
+      const response = await request(expressApp).get('/probe');
+
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
     });
   });
 

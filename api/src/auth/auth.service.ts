@@ -1,8 +1,9 @@
-import { ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
+import { AppException } from '../common/app.exception';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { LoginDto, MeDto, RegisterDto } from './auth.dto';
@@ -59,11 +60,11 @@ export class AuthService {
       });
     } catch (error) {
       if (this.isEmailConflict(error)) {
-        throw new ConflictException({
-          statusCode: 409,
-          code: 'EMAIL_ALREADY_USED',
-          message: 'Cette adresse e-mail est déjà utilisée.',
-        });
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          'EMAIL_ALREADY_USED',
+          'Cette adresse e-mail est déjà utilisée.',
+        );
       }
       throw error;
     }
@@ -82,19 +83,15 @@ export class AuthService {
       await this.passwordService.verifyAgainstDummy(input.password);
     }
     if (!user || !(await this.passwordService.verify(user.passwordHash, input.password))) {
-      throw new UnauthorizedException({
-        statusCode: 401,
-        code: 'INVALID_CREDENTIALS',
-        message: 'Adresse e-mail ou mot de passe incorrect.',
-      });
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        'INVALID_CREDENTIALS',
+        'Adresse e-mail ou mot de passe incorrect.',
+      );
     }
 
     if (user.status === AccountStatus.Suspended) {
-      throw new ForbiddenException({
-        statusCode: 403,
-        code: 'ACCOUNT_SUSPENDED',
-        message: 'Ce compte est suspendu.',
-      });
+      throw new AppException(HttpStatus.FORBIDDEN, 'ACCOUNT_SUSPENDED', 'Ce compte est suspendu.');
     }
 
     const loggedInAt = new Date();

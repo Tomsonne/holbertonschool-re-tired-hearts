@@ -1,6 +1,6 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import { Response } from 'express';
-import { DEFAULT_ERRORS, ErrorBody } from './app.exception';
+import { AppException, DEFAULT_ERRORS, ErrorBody } from './app.exception';
 
 // Donne à toutes les erreurs le format documenté (docs/contrats-api.md).
 // Une erreur inattendue est journalisée côté serveur et renvoyée en 500 générique :
@@ -25,7 +25,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const parDefaut = DEFAULT_ERRORS[statusCode] ?? DEFAULT_ERRORS[statusCode >= 500 ? 500 : 400];
     const payload = exception.getResponse();
 
-    if (typeof payload === 'object' && payload !== null && 'code' in payload) {
+    if (
+      exception instanceof AppException &&
+      statusCode < 500 &&
+      typeof payload === 'object' &&
+      payload !== null
+    ) {
       const { code, message, details } = payload as Partial<ErrorBody>;
       return {
         statusCode,

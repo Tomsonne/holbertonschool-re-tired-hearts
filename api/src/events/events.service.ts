@@ -7,7 +7,7 @@ import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { EventRegistration, RegistrationStatus } from './event-registration.entity';
 import { Event, EventStatus } from './event.entity';
-import { EventFiltersDto } from './event-filters.dto';
+import { EventFiltersDto, OrganizedEventsFiltersDto, RegistrationScope } from './event-filters.dto';
 import { EventInputDto, UpdateEventDto } from './event-input.dto';
 import { lockEvent } from './lock-event';
 
@@ -138,8 +138,43 @@ export class EventsService {
     }
     const [events, total] = await query.orderBy('event.starts_at', 'ASC')
       .addOrderBy('event.id', 'ASC').skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
-    if (events.length === 0) return { items: [], page, pageSize, total };
+    return { items: await this.toSummaries(actorId, events), page, pageSize, total };
+  }
 
+  // Tous statuts, brouillons compris : sans cette route, un brouillon n'est plus retrouvable
+  // une fois son identifiant perdu, car GET /events ne rend que le publié et à venir.
+  async listOrganized(actorId: string, filters: OrganizedEventsFiltersDto) {
+    const actor = await this.actor(this.db.manager, actorId);
+    this.requireOrganizer(actor);
+    const query = this.db.manager.createQueryBuilder(Event, 'event')
+      .where('event.organizer_id = :actorId', { actorId });
+    if (filters.status) {
+      query.andWhere('event.status = :status', { status: filters.status });
+    }
+    // Les plus récentes d'abord : brouillons et sorties à venir avant l'historique.
+    const events = await query.orderBy('event.starts_at', 'DESC')
+      .addOrderBy('event.id', 'ASC').getMany();
+    return this.toSummaries(actorId, events);
+  }
+
+  // Une inscription retirée ne figure plus dans la liste, même sur une sortie encore ouverte.
+  async listMyRegistrations(actorId: string, scope: RegistrationScope) {
+    await this.actor(this.db.manager, actorId);
+    const now = new Date();
+    const events = await this.db.manager.createQueryBuilder(Event, 'event')
+      .innerJoin(EventRegistration, 'registration',
+        'registration.event_id = event.id AND registration.user_id = :actorId', { actorId })
+      .where('registration.status = :registered', { registered: RegistrationStatus.Registered })
+      .andWhere(scope === 'past' ? 'event.starts_at <= :now' : 'event.starts_at > :now', { now })
+      .orderBy('event.starts_at', scope === 'past' ? 'DESC' : 'ASC')
+      .addOrderBy('event.id', 'ASC')
+      .getMany();
+    return this.toSummaries(actorId, events);
+  }
+
+  // Projection explicite partagée par les listes : ni adresse exacte, ni code postal, ni code INSEE.
+  private async toSummaries(actorId: string, events: Event[]) {
+    if (events.length === 0) return [];
     const eventIds = events.map((event) => event.id);
     const organizerIds = [...new Set(events.map((event) => event.organizerId))];
     const interestIds = [...new Set(events.map((event) => event.interestId))];
@@ -161,8 +196,9 @@ export class EventsService {
     const profileById = new Map(profiles.map((profile) => [profile.userId, profile]));
     const registrationByEventId = new Map(registrations.map((registration) => [registration.eventId, registration]));
     const countByEventId = new Map(counts.map((row) => [row.eventId, Number(row.registeredCount)]));
+    const now = new Date();
 
-    const items = events.map((event) => {
+    return events.map((event) => {
       const interest = interestById.get(event.interestId)!;
       const organizer = organizerById.get(event.organizerId)!;
       const organizerProfile = profileById.get(event.organizerId);
@@ -175,7 +211,7 @@ export class EventsService {
         endsAt: event.endsAt.toISOString(),
         location: { cityName: event.cityName, departmentCode: event.departmentCode },
         status: event.status,
-        isPast: false,
+        isPast: event.startsAt <= now,
         capacity: event.capacity,
         availablePlaces: Math.max(0, event.capacity - registeredCount),
         organizer: {
@@ -187,7 +223,6 @@ export class EventsService {
         myRegistration: registrationByEventId.get(event.id)?.status ?? null,
       };
     });
-    return { items, page, pageSize, total };
   }
 
   // Projection explicite : aucune adresse privée ni code postal dans une réponse générale.
