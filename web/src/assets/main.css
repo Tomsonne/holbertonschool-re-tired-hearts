@@ -871,6 +871,36 @@ a.bouton {
   margin-bottom: 1rem;
 }
 
+.badge--brouillon {
+  border-style: dashed;
+  border-color: var(--encre-douce);
+  color: var(--encre-douce);
+}
+
+/* Panneau de l'organisateur : boutons empilés, chacun bien séparé (cibles distinctes). */
+.gestion-sortie > p,
+.gestion-sortie .confirmation > p {
+  margin: 0 0 1rem;
+}
+
+.gestion-sortie .message {
+  margin-bottom: 1rem;
+}
+
+.gestion-sortie > .bouton + .bouton {
+  margin-top: 0.75rem;
+}
+
+.gestion-sortie > .bouton {
+  display: block;
+  width: 100%;
+}
+
+.gestion-sortie .message:focus {
+  outline: 3px solid var(--vert);
+  outline-offset: 3px;
+}
+
 .adresse-manquante p {
   margin: 0 0 0.6rem;
 }

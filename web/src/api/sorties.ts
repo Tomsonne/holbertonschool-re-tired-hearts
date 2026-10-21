@@ -56,3 +56,12 @@ export const inscrire = (id: string) =>
 
 export const desinscrire = (id: string) =>
   apiDelete<ResultatInscription>(`/events/${encodeURIComponent(id)}/registration`);
+
+// ---------- Gestion par l'organisateur (mission 17) ----------
+// Chaque action renvoie la fiche à jour ; l'API vérifie le propriétaire et l'état (R-EVT-7).
+const chemin = (id: string) => `/events/${encodeURIComponent(id)}`;
+
+export const publier = (id: string) => apiPost<EventDetail>(`${chemin(id)}/publish`);
+export const annuler = (id: string, reason: string) => apiPost<EventDetail>(`${chemin(id)}/cancel`, { reason });
+export const cloturer = (id: string) => apiPost<EventDetail>(`${chemin(id)}/complete`);
+export const supprimer = (id: string) => apiDelete<void>(chemin(id));

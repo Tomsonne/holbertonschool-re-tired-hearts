@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ApiError } from '../api/http';
 import { desinscrire, fetchEvent, inscrire, type EventDetail } from '../api/sorties';
+import GestionSortie from '../components/GestionSortie.vue';
 import SortiesInaccessibles from '../components/SortiesInaccessibles.vue';
 import { lireFiltres, versQuery } from '../router/filtresMembres';
 import { etatSortie, formaterHoraire, formaterLocalisation, formaterPlaces } from '../formats';
@@ -17,7 +18,7 @@ import { useSessionStore } from '../stores/session';
 const route = useRoute();
 const session = useSessionStore();
 
-const etat = ref<'chargement' | 'erreur' | 'indisponible' | 'pret'>('chargement');
+const etat = ref<'chargement' | 'erreur' | 'indisponible' | 'supprimee' | 'pret'>('chargement');
 const erreur = ref('');
 const sortie = ref<EventDetail | null>(null);
 const accesRefuse = ref<'suspendu' | 'bloque' | null>(null);
@@ -41,6 +42,26 @@ const estInscrit = computed(() => sortie.value?.myRegistration === 'registered')
 // Annulée ou terminée : plus rien à faire, le bandeau suffit (R-EVT-8).
 const estOuverte = computed(() => etatAffiche.value === 'ouverte' || etatAffiche.value === 'complete');
 const lienOrganisateur = computed(() => session.estApprouve && !sortie.value?.isOrganizer);
+// Brouillon ou sortie ouverte : la capacité et les places gardent un sens.
+const afficherPlaces = computed(() => estOuverte.value || etatAffiche.value === 'brouillon');
+
+// ---------- Organisateur (mission 17) ----------
+const titreSupprime = ref('');
+const zoneSuppression = ref<HTMLElement | null>(null);
+
+function recevoirMiseAJour(misAJour: EventDetail): void {
+  sortie.value = misAJour;
+  document.title = `${misAJour.title} — Re-Tired Hearts`;
+}
+
+// Brouillon supprimé : la fiche n'existe plus, on le dit et on propose la suite.
+async function apresSuppression(titre: string): Promise<void> {
+  titreSupprime.value = titre;
+  etat.value = 'supprimee';
+  sortie.value = null;
+  await nextTick();
+  zoneSuppression.value?.focus();
+}
 
 function gererRefusDAcces(e: unknown): boolean {
   if (!(e instanceof ApiError)) return false;
@@ -217,13 +238,30 @@ watch(() => route.params.eventId, (id) => id && charger());
     <p><RouterLink :to="{ name: 'sorties' }">Voir les sorties à venir</RouterLink></p>
   </section>
 
+  <section
+    v-else-if="etat === 'supprimee'"
+    ref="zoneSuppression"
+    class="message message--succes"
+    role="status"
+    tabindex="-1"
+    aria-labelledby="titre-sortie-supprimee"
+  >
+    <h2 id="titre-sortie-supprimee">Brouillon supprimé</h2>
+    <p>Le brouillon « {{ titreSupprime }} » a été supprimé.</p>
+    <p><RouterLink :to="{ name: 'sorties' }">Voir les sorties à venir</RouterLink></p>
+  </section>
+
   <article v-else-if="sortie" class="fiche-sortie" aria-labelledby="titre-sortie">
     <h2 id="titre-sortie" class="fiche-sortie__titre">{{ sortie.title }}</h2>
     <p class="surtitre">{{ sortie.interest.label }}</p>
 
     <!-- Bandeau de statut : le titre dit le statut en toutes lettres, la couleur n'est qu'un appui. -->
+    <section v-if="etatAffiche === 'brouillon'" class="message message--info bandeau-sortie" aria-labelledby="titre-bandeau-sortie">
+      <h3 id="titre-bandeau-sortie">Brouillon</h3>
+      <p>Cette sortie n'est visible que par vous. Publiez-la pour que les membres puissent s'y inscrire.</p>
+    </section>
     <section
-      v-if="etatAffiche === 'annulee'"
+      v-else-if="etatAffiche === 'annulee'"
       class="message message--erreur bandeau-sortie"
       aria-labelledby="titre-bandeau-sortie"
     >
@@ -292,14 +330,22 @@ watch(() => route.params.eventId, (id) => id && charger());
             <template v-else>{{ sortie.organizer.displayName }}</template>
           </dd>
           <!-- Annulée ou terminée : des places « restantes » n'auraient plus de sens. -->
-          <template v-if="estOuverte">
+          <template v-if="afficherPlaces">
             <dt>Places</dt>
             <dd>{{ formaterPlaces(sortie) }}</dd>
           </template>
         </dl>
       </div>
 
-      <section class="carte inscription-sortie" aria-labelledby="titre-inscription">
+      <!-- L'organisateur ne peut pas s'inscrire à sa propre sortie : il la gère. -->
+      <GestionSortie
+        v-if="sortie.isOrganizer"
+        :sortie="sortie"
+        @mis-a-jour="recevoirMiseAJour"
+        @supprimee="apresSuppression"
+      />
+
+      <section v-else class="carte inscription-sortie" aria-labelledby="titre-inscription">
         <h3 id="titre-inscription">Participation</h3>
 
         <p

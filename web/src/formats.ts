@@ -55,9 +55,11 @@ export function formaterHoraire(debutIso: string, finIso: string): string {
 
 // Ce que le membre doit comprendre d'un coup d'œil. L'ordre compte : une sortie annulée
 // reste « annulée » même si elle était complète ; une sortie passée est « terminée ».
-export type EtatSortie = 'annulee' | 'terminee' | 'complete' | 'ouverte';
+export type EtatSortie = 'brouillon' | 'annulee' | 'terminee' | 'complete' | 'ouverte';
 
+// « brouillon » n'est visible que de son organisateur et des modérateurs.
 export function etatSortie(s: { status: string; isPast: boolean; availablePlaces: number }): EtatSortie {
+  if (s.status === 'draft') return 'brouillon';
   if (s.status === 'cancelled') return 'annulee';
   if (s.status === 'completed' || s.isPast) return 'terminee';
   if (s.availablePlaces <= 0) return 'complete';
@@ -65,6 +67,7 @@ export function etatSortie(s: { status: string; isPast: boolean; availablePlaces
 }
 
 export const LIBELLES_ETAT_SORTIE: Record<EtatSortie, string> = {
+  brouillon: 'Brouillon',
   annulee: 'Annulée',
   terminee: 'Terminée',
   complete: 'Complet',

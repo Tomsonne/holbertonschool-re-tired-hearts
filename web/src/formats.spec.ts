@@ -36,5 +36,6 @@ describe('formats des sorties', () => {
     expect(etatSortie({ ...base, isPast: true, availablePlaces: 0 })).toBe('terminee');
     expect(etatSortie({ ...base, status: 'completed' })).toBe('terminee');
     expect(etatSortie({ ...base, status: 'cancelled', availablePlaces: 0 })).toBe('annulee');
+    expect(etatSortie({ ...base, status: 'draft', isPast: true })).toBe('brouillon');
   });
 });
