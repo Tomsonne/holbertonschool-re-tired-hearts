@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from 'class-validator';
+import { EventStatus } from './event.entity';
 
 export class EventFiltersDto {
   @IsOptional()
@@ -35,4 +36,21 @@ export class EventFiltersDto {
   @Min(1)
   @Max(10000)
   page?: number;
+}
+
+export type RegistrationScope = 'upcoming' | 'past';
+
+export class OrganizedEventsFiltersDto {
+  // « ?status= » sans valeur revient à ne pas filtrer, plutôt qu'à un 400.
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
+  @IsEnum(EventStatus)
+  status?: EventStatus;
+}
+
+export class MyRegistrationsFiltersDto {
+  @IsOptional()
+  @Transform(({ value }) => value === '' ? undefined : value)
+  @IsIn(['upcoming', 'past'])
+  scope?: RegistrationScope;
 }

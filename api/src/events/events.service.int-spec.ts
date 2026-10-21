@@ -6,6 +6,7 @@ import { Interest } from '../interests/interest.entity';
 import { ModerationAction } from '../moderation/moderation-action.entity';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
+import { EventRegistration, RegistrationStatus } from './event-registration.entity';
 import { Event, EventStatus } from './event.entity';
 import { EventInputDto } from './event-input.dto';
 import { EventsService } from './events.service';
@@ -209,5 +210,59 @@ describe('EventsService (PostgreSQL)', () => {
     expect(listedIds).not.toContain(past.id);
     expect(listedIds).not.toContain(events[14].id);
     expect(JSON.stringify({ first, second })).not.toContain('Place des Terreaux');
+  });
+
+  it('rend à l’organisateur ses sorties de tous statuts, sans celles des autres', async () => {
+    const cityName = `Gestion ${randomUUID()}`;
+    const location = { cityName, postalCode: '69001', departmentCode: '69', verified: false };
+    const draft = await service.create(organizerId, { ...input(), location });
+    const published = await service.create(organizerId, { ...input(), location });
+    const finished = await service.create(organizerId, { ...input(), location });
+    const foreign = await service.create(otherOrganizerId, { ...input(), location });
+    eventIds.push(draft.id, published.id, finished.id, foreign.id);
+    await service.publish(organizerId, published.id);
+    await service.publish(organizerId, finished.id);
+    await service.publish(otherOrganizerId, foreign.id);
+    await db.manager.update(Event, finished.id, {
+      startsAt: new Date(Date.now() - 7200000),
+      endsAt: new Date(Date.now() - 3600000),
+    });
+    await service.complete(organizerId, finished.id);
+
+    const organized = await service.listOrganized(organizerId, {});
+    const organizedIds = organized.map((event) => event.id);
+    expect(organizedIds).toEqual(expect.arrayContaining([draft.id, published.id, finished.id]));
+    expect(organizedIds).not.toContain(foreign.id);
+    expect(organized.find((event) => event.id === finished.id)).toMatchObject({
+      status: EventStatus.Completed,
+      isPast: true,
+    });
+    expect(JSON.stringify(organized)).not.toContain('Place des Terreaux');
+    expect(JSON.stringify(organized)).not.toContain('69001');
+
+    const drafts = await service.listOrganized(organizerId, { status: EventStatus.Draft });
+    expect(drafts.map((event) => event.id)).toContain(draft.id);
+    expect(drafts.map((event) => event.id)).not.toContain(published.id);
+    expect(drafts.every((event) => event.status === EventStatus.Draft)).toBe(true);
+    await expect(service.listOrganized(memberId, {})).rejects.toMatchObject({
+      response: { code: 'ROLE_REQUIRED' },
+    });
+
+    // Mes inscriptions : les mêmes sorties vues du membre, inscription retirée exclue.
+    await db.manager.save(db.manager.create(EventRegistration, {
+      eventId: published.id, userId: memberId, status: RegistrationStatus.Registered,
+    }));
+    await db.manager.save(db.manager.create(EventRegistration, {
+      eventId: finished.id, userId: memberId, status: RegistrationStatus.Registered,
+    }));
+    await db.manager.save(db.manager.create(EventRegistration, {
+      eventId: foreign.id, userId: memberId, status: RegistrationStatus.Withdrawn, withdrawnAt: new Date(),
+    }));
+    const upcoming = await service.listMyRegistrations(memberId, 'upcoming');
+    const past = await service.listMyRegistrations(memberId, 'past');
+    expect(upcoming.map((event) => event.id)).toEqual([published.id]);
+    expect(past.map((event) => event.id)).toEqual([finished.id]);
+    expect(upcoming[0].myRegistration).toBe(RegistrationStatus.Registered);
+    expect(JSON.stringify({ upcoming, past })).not.toContain('Place des Terreaux');
   });
 });
