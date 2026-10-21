@@ -70,6 +70,8 @@ async function monter() {
       { path: '/membres/:userId', name: 'membre', component: vide },
       { path: '/mes-sorties', name: 'mes-sorties', component: vide },
       { path: '/sorties', name: 'sorties', component: vide },
+      { path: '/sorties/nouvelle', name: 'nouvelle-sortie', component: vide },
+      { path: '/sorties/:eventId/modifier', name: 'modifier-sortie', component: vide },
       { path: '/sorties/:eventId', name: 'sortie', component: EventView, meta: { connexionRequise: true } },
     ],
   });
@@ -103,6 +105,32 @@ describe('panneau « Gérer cette sortie »', () => {
 
     expect(wrapper.find('.gestion-sortie').exists()).toBe(false);
     expect(wrapper.get('.inscription-sortie').text()).toContain('M’inscrire à cette sortie');
+  });
+
+  it.each([
+    ['brouillon', { status: 'draft' as const }, true],
+    ['publiée à venir', {}, true],
+    ['publiée commencée', { ...PASSE }, false],
+    ['annulée', { status: 'cancelled' as const }, false],
+  ])('lien « Modifier la sortie » : sortie %s → %s', async (_cas, surcharge, attendu) => {
+    vi.mocked(sortiesApi.fetchEvent).mockResolvedValue(sortie(surcharge));
+    const wrapper = await monter();
+
+    const lien = panneau(wrapper).find('.gestion-sortie__modifier');
+    expect(lien.exists()).toBe(attendu);
+    if (attendu) expect(lien.attributes('href')).toBe(`/sorties/${ID}/modifier`);
+  });
+
+  it('message laissé par le formulaire : affiché sur la fiche, focalisé, lu une seule fois', async () => {
+    history.replaceState({ annonce: 'Vos modifications sont enregistrées.' }, '');
+    vi.mocked(sortiesApi.fetchEvent).mockResolvedValue(sortie());
+    const wrapper = await monter();
+
+    const annonce = wrapper.get('.annonce-sortie');
+    expect(annonce.text()).toBe('Vos modifications sont enregistrées.');
+    expect(annonce.attributes('role')).toBe('status');
+    expect(document.activeElement).toBe(annonce.element);
+    expect(history.state?.annonce).toBeUndefined();
   });
 
   describe('brouillon', () => {

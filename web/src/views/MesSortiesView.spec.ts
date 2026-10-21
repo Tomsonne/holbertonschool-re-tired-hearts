@@ -58,6 +58,8 @@ async function monter(chemin = '/mes-sorties') {
       { path: '/membres/:userId', name: 'membre', component: vide },
       { path: '/sorties', name: 'sorties', component: vide },
       { path: '/mes-sorties', name: 'mes-sorties', component: MesSortiesView, meta: { connexionRequise: true } },
+      { path: '/sorties/nouvelle', name: 'nouvelle-sortie', component: vide },
+      { path: '/sorties/:eventId/modifier', name: 'modifier-sortie', component: vide },
       { path: '/sorties/:eventId', name: 'sortie', component: EventView, meta: { connexionRequise: true } },
     ],
   });
@@ -139,6 +141,10 @@ describe('« Mes sorties »', () => {
     const wrapper = await monter();
 
     expect(wrapper.get('[role="status"]').text()).toBe("Vous n'organisez encore aucune sortie.");
+    // Pas d'impasse : on peut créer sa première sortie.
+    const creer = wrapper.get('a.bouton');
+    expect(creer.text()).toBe('Créer une sortie');
+    expect(creer.attributes('href')).toBe('/sorties/nouvelle');
   });
 
   it('chargement puis erreur avec « Réessayer »', async () => {

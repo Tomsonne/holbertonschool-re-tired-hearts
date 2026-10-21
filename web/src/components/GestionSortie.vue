@@ -33,6 +33,8 @@ const estPubliee = computed(() => props.sortie.status === 'published');
 const debutPasse = computed(() => new Date(props.sortie.startsAt).getTime() <= Date.now());
 const finPassee = computed(() => new Date(props.sortie.endsAt).getTime() <= Date.now());
 const longueurMotif = computed(() => motif.value.trim().length);
+// R-EVT-5 : brouillon, ou sortie publiée pas encore commencée.
+const modifiable = computed(() => estBrouillon.value || (estPubliee.value && !debutPasse.value));
 
 async function annoncer(type: 'succes' | 'erreur', texte: string): Promise<void> {
   retour.value = { type, texte };
@@ -137,6 +139,14 @@ async function confirmerSuppression(): Promise<void> {
     >
       {{ retour.texte }}
     </p>
+
+    <RouterLink
+      v-if="modifiable && !confirmation"
+      class="bouton bouton--secondaire gestion-sortie__modifier"
+      :to="{ name: 'modifier-sortie', params: { eventId: sortie.id } }"
+    >
+      Modifier la sortie
+    </RouterLink>
 
     <!-- Annulation : motif obligatoire, montré aux inscrits. Le titre de la sortie est rappelé. -->
     <form

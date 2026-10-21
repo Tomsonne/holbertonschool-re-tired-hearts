@@ -49,6 +49,19 @@ const lienOrganisateur = computed(() => session.estApprouve && !sortie.value?.is
 const afficherPlaces = computed(() => estOuverte.value || etatAffiche.value === 'brouillon');
 
 // ---------- Organisateur (mission 17) ----------
+// Message laissé par le formulaire (création ou modification), lu une seule fois.
+const annonce = ref<string | null>(null);
+const zoneAnnonce = ref<HTMLElement | null>(null);
+
+async function lireAnnonce(): Promise<void> {
+  const texte = typeof history.state?.annonce === 'string' ? history.state.annonce : null;
+  if (!texte) return;
+  annonce.value = texte;
+  history.replaceState({ ...history.state, annonce: undefined }, '');
+  await nextTick();
+  zoneAnnonce.value?.focus();
+}
+
 const titreSupprime = ref('');
 const zoneSuppression = ref<HTMLElement | null>(null);
 
@@ -219,7 +232,10 @@ async function seDesinscrire(): Promise<void> {
   }
 }
 
-onMounted(charger);
+onMounted(async () => {
+  await charger();
+  if (etat.value === 'pret') await lireAnnonce();
+});
 watch(() => route.params.eventId, (id) => id && charger());
 </script>
 
@@ -257,6 +273,9 @@ watch(() => route.params.eventId, (id) => id && charger());
   </section>
 
   <article v-else-if="sortie" class="fiche-sortie" aria-labelledby="titre-sortie">
+    <p v-if="annonce" ref="zoneAnnonce" class="message message--succes annonce-sortie" role="status" tabindex="-1">
+      {{ annonce }}
+    </p>
     <h2 id="titre-sortie" class="fiche-sortie__titre">{{ sortie.title }}</h2>
     <p class="surtitre">{{ sortie.interest.label }}</p>
 

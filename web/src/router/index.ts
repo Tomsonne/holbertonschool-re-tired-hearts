@@ -58,6 +58,19 @@ export const router = createRouter({
       component: () => import('../views/MesSortiesView.vue'),
       meta: { title: 'Mes sorties', connexionRequise: true },
     },
+    // Créer et modifier : réservées aux organisateurs approuvés (l'écran l'explique, l'API refuse).
+    {
+      path: '/sorties/nouvelle',
+      name: 'nouvelle-sortie',
+      component: () => import('../views/EventFormView.vue'),
+      meta: { title: 'Créer une sortie', connexionRequise: true },
+    },
+    {
+      path: '/sorties/:eventId/modifier',
+      name: 'modifier-sortie',
+      component: () => import('../views/EventFormView.vue'),
+      meta: { title: 'Modifier une sortie', connexionRequise: true },
+    },
     {
       path: '/sorties/:eventId',
       name: 'sortie',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { etatSortie, formaterHoraire, formaterPlaces } from './formats';
+import { etatSortie, formaterHoraire, formaterPlaces, isoDepuisParis, partiesParis } from './formats';
 
 // Les heures utilisent des espaces insécables ; on les rend visibles pour comparer.
 const lisible = (texte: string) => texte.replace(/\u00a0/g, ' ');
@@ -40,5 +40,29 @@ describe('formats des sorties', () => {
     expect(etatSortie({ ...base, status: 'completed' })).toBe('terminee');
     expect(etatSortie({ ...base, status: 'cancelled', availablePlaces: 0 })).toBe('annulee');
     expect(etatSortie({ ...base, status: 'draft', isPast: true })).toBe('brouillon');
+  });
+});
+
+describe('saisie des dates à l’heure de Paris', () => {
+  it('convertit dans les deux sens, en hiver comme en été', () => {
+    expect(isoDepuisParis('2026-11-14', '14:30')).toBe('2026-11-14T13:30:00.000Z');
+    expect(isoDepuisParis('2027-06-05', '10:00')).toBe('2027-06-05T08:00:00.000Z');
+    expect(partiesParis('2026-11-14T13:30:00.000Z')).toEqual({ date: '2026-11-14', heure: '14:30' });
+    expect(partiesParis('2027-06-05T22:30:00.000Z')).toEqual({ date: '2027-06-06', heure: '00:30' });
+  });
+
+  it("gère les jours de changement d'heure", () => {
+    // 29 mars 2026 : à 2 h, il est 3 h. 3 h 30 existe (heure d'été), 2 h 30 n'existe pas.
+    expect(isoDepuisParis('2026-03-29', '03:30')).toBe('2026-03-29T01:30:00.000Z');
+    expect(isoDepuisParis('2026-03-29', '02:30')).toBeNull();
+    // 25 octobre 2026 : retour à l'heure d'hiver.
+    expect(isoDepuisParis('2026-10-25', '12:00')).toBe('2026-10-25T11:00:00.000Z');
+  });
+
+  it('refuse une date ou une heure qui n’existe pas', () => {
+    expect(isoDepuisParis('2026-06-31', '10:00')).toBeNull();
+    expect(isoDepuisParis('2026-06-01', '25:00')).toBeNull();
+    expect(isoDepuisParis('', '10:00')).toBeNull();
+    expect(partiesParis('pas une date')).toBeNull();
   });
 });

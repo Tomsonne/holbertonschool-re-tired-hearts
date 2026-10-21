@@ -1,5 +1,5 @@
 import type { Page } from './decouverte';
-import { apiDelete, apiGet, apiPost } from './http';
+import { apiDelete, apiGet, apiPatch, apiPost } from './http';
 import type { Interest } from './interests';
 
 // Contrats « EventSummary » et « EventDetail » (docs/contrats-api.md, tâche 2).
@@ -68,3 +68,32 @@ export const supprimer = (id: string) => apiDelete<void>(chemin(id));
 
 // Toutes les sorties de l'organisateur connecté, tous statuts (brouillons compris), sans pagination.
 export const fetchMesSorties = () => apiGet<EventSummary[]>('/me/organized-events');
+
+// Contrat « EventInput ». Le code postal est obligatoire pour une sortie (contrairement au profil).
+export type EventLocationInput = {
+  cityName: string;
+  postalCode: string;
+  departmentCode: string;
+  cityCode?: string | null;
+  verified: boolean;
+};
+
+export type EventInput = {
+  title: string;
+  description: string;
+  interestId: number;
+  startsAt: string;
+  endsAt: string;
+  location: EventLocationInput;
+  areaHint?: string | null;
+  exactAddress: string;
+  capacity: number;
+};
+
+// Création : toujours un brouillon (201 EventDetail).
+export const creerSortie = (donnees: EventInput) => apiPost<EventDetail>('/events', donnees);
+
+// Modification : seulement les champs changés. EventDetail ne renvoie pas le code postal :
+// `location` n'est donc envoyé que si l'organisateur change le lieu.
+export const modifierSortie = (id: string, changements: Partial<EventInput>) =>
+  apiPatch<EventDetail>(chemin(id), changements);

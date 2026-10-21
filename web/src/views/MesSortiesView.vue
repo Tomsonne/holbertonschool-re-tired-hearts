@@ -111,6 +111,7 @@ onMounted(charger);
 
   <template v-else>
     <p>Retrouvez toutes les sorties que vous organisez, y compris vos brouillons. Ouvrez-en une pour la gérer.</p>
+    <p><RouterLink class="bouton" :to="{ name: 'nouvelle-sortie' }">Créer une sortie</RouterLink></p>
 
     <p v-if="etat === 'chargement'" class="message" role="status">Chargement de vos sorties…</p>
 
