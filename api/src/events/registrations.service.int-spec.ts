@@ -102,11 +102,55 @@ describe('RegistrationsService (PostgreSQL)', () => {
       registrations.register(member2Id, outing.id),
     ]);
     expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.find((outcome) => outcome.status === 'fulfilled')).toMatchObject({
+      value: { status: 'registered', availablePlaces: 0 },
+    });
     const failure = outcomes.find((outcome) => outcome.status === 'rejected') as PromiseRejectedResult;
-    expect(failure.reason).toMatchObject({ response: { code: 'EVENT_FULL' } });
+    expect(failure.reason).toMatchObject({ status: 409, response: { code: 'EVENT_FULL' } });
     expect(await db.manager.countBy(EventRegistration, {
       eventId: outing.id,
       status: RegistrationStatus.Registered,
+    })).toBe(1);
+    expect((await events.detail(organizerId, outing.id)).availablePlaces).toBe(0);
+  });
+
+  it('refuse une inscription en double et ne crée pas de deuxième ligne', async () => {
+    const outing = await event(2);
+    await registrations.register(member1Id, outing.id);
+    await expect(registrations.register(member1Id, outing.id)).rejects.toMatchObject({
+      status: 409, response: { code: 'ALREADY_REGISTERED' },
+    });
+    expect(await db.manager.countBy(EventRegistration, { eventId: outing.id, userId: member1Id })).toBe(1);
+    expect((await events.detail(organizerId, outing.id)).availablePlaces).toBe(1);
+  });
+
+  it('refuse une inscription à une sortie complète, annulée ou passée sans écrire de ligne', async () => {
+    const full = await event(1);
+    await registrations.register(member1Id, full.id);
+    await expect(registrations.register(member2Id, full.id)).rejects.toMatchObject({
+      status: 409, response: { code: 'EVENT_FULL' },
+    });
+
+    const cancelled = await event(1);
+    await events.cancel(organizerId, cancelled.id, 'Sortie annulée');
+    await expect(registrations.register(member2Id, cancelled.id)).rejects.toMatchObject({
+      status: 409, response: { code: 'EVENT_NOT_OPEN' },
+    });
+
+    const past = await event(1);
+    await db.manager.update(Event, { id: past.id }, {
+      startsAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      endsAt: new Date(Date.now() - 60 * 60 * 1000),
+    });
+    await expect(registrations.register(member2Id, past.id)).rejects.toMatchObject({
+      status: 409, response: { code: 'EVENT_NOT_OPEN' },
+    });
+
+    for (const outing of [full, cancelled, past]) {
+      expect(await db.manager.countBy(EventRegistration, { eventId: outing.id, userId: member2Id })).toBe(0);
+    }
+    expect(await db.manager.countBy(EventRegistration, {
+      eventId: full.id, status: RegistrationStatus.Registered,
     })).toBe(1);
   });
 
