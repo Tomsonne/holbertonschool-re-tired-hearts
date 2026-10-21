@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -131,6 +132,38 @@ describe('Issue #22 — confidentialité de la messagerie (bout en bout)', () =>
       expect(JSON.stringify(response.body)).not.toContain(secret);
     }
     expect(await db.getRepository(Message).countBy({ conversationId: id })).toBe(0);
+  });
+
+  it('contrôle la participation avant tout contenu invalide, sans fuite ni insertion', async () => {
+    const { a, id } = await started();
+    const outsider = await user();
+    const moderator = await user(UserRole.Moderator);
+    const invalid = [{ body: '' }, { body: '  \t\n  ' }, { body: 'x'.repeat(1001) }, {}, { body: 42 }];
+    const missingId = randomUUID();
+    const expected = { statusCode: 404, code: 'CONVERSATION_NOT_FOUND', message: 'Cette conversation est indisponible.' };
+
+    for (const intruder of [outsider, moderator]) {
+      for (const conversationId of [id, missingId]) {
+        for (const input of invalid) {
+          const response = await http().post(`/api/conversations/${conversationId}/messages`)
+            .set('Cookie', intruder.cookie).send(input);
+          expect(response.status).toBe(404);
+          expect(response.body).toEqual(expected);
+          expect(JSON.stringify(response.body)).not.toContain(secret);
+        }
+      }
+    }
+    for (const input of invalid) {
+      const response = await http().post(`/api/conversations/${id}/messages`)
+        .set('Cookie', a.cookie).send(input);
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe('VALIDATION_FAILED');
+    }
+    expect(await db.getRepository(Message).countBy({ conversationId: id })).toBe(0);
+    const valid = await http().post(`/api/conversations/${id}/messages`)
+      .set('Cookie', a.cookie).send({ body: secret });
+    expect(valid.status).toBe(201);
+    expect(await db.getRepository(Message).countBy({ conversationId: id })).toBe(1);
   });
 
   it('réutilise la conversation dans les deux sens avec 200 et une seule paire en base', async () => {
