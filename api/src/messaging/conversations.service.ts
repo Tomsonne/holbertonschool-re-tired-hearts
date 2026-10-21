@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { isUUID } from 'class-validator';
 import { DataSource, EntityManager } from 'typeorm';
 import { AppException } from '../common/app.exception';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
@@ -168,6 +169,18 @@ export class ConversationsService {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
       throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'La limite demandée est invalide.');
     }
+    // Un curseur étranger à cette conversation laissait la sous-requête du filtre sans
+    // ligne : la comparaison devenait NULL, la page revenait vide et la route répondait
+    // 200 au lieu du 400 annoncé (docs/contrats-api.md).
+    const cursor = before ?? undefined;
+    if (cursor !== undefined) {
+      const known = isUUID(cursor) && await this.db.manager.countBy(Message, {
+        id: cursor, conversationId: id,
+      }) > 0;
+      if (!known) {
+        throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Le curseur de pagination est invalide.');
+      }
+    }
     const rows: { id: string; body: string; sender_id: string; display_name: string;
       user_status: AccountStatus; profile_status: ProfileStatus; created_at: Date }[] = await this.db.query(`
       SELECT m.id, m.body, m.sender_id, m.created_at, p.display_name,
@@ -182,7 +195,7 @@ export class ConversationsService {
         ))
       ORDER BY m.created_at DESC, m.id DESC
       LIMIT $3
-    `, [id, before ?? null, limit]);
+    `, [id, cursor ?? null, limit]);
     return rows.reverse().map((row) => ({
       id: row.id,
       body: row.body,

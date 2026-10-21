@@ -194,7 +194,7 @@ Aucune route ne prend d'identifiant d'inscription : c'est toujours celle de la s
 | `POST /api/conversations` | approuvé | `{ recipientId, eventId? }` | `201 Conversation` (nouvelle) ou `200 Conversation` (existante) | `400` (soi-même), `403 NOT_ELIGIBLE`, `404 PROFILE_UNAVAILABLE`, `409 MESSAGING_DISABLED` |
 | `GET /api/conversations/:id` | participant | — | `200 Conversation` | `404 CONVERSATION_NOT_FOUND` (aussi pour les non-participants) |
 | `GET /api/conversations/:id/messages?before=&limit=` | participant | — | `200 Message[]` du plus ancien au plus récent (50 max) | `404 CONVERSATION_NOT_FOUND`, `400` (curseur ou limite invalide) |
-| `POST /api/conversations/:id/messages` | participant approuvé | `{ body }` (1–1000 après nettoyage) | `201 Message` | `400 VALIDATION_FAILED`, `404`, `409 RECIPIENT_UNAVAILABLE`, `409 MESSAGING_DISABLED`, `429` |
+| `POST /api/conversations/:id/messages` | participant approuvé | `{ body }` (1–1000 après nettoyage) | `201 Message` | `400 VALIDATION_FAILED`, `404`, `409 RECIPIENT_UNAVAILABLE`, `409 MESSAGING_DISABLED`, `429` (30 envois par tranche de 10 minutes et par compte, toute tentative comprise) |
 
 ```ts
 type Conversation = {
@@ -210,6 +210,8 @@ type Message = { id: string; body: string; sentByMe: boolean; senderDisplayName:
 
 `before` est l'identifiant du premier message de la page la plus récente. Sans curseur,
 la route renvoie les 50 derniers messages ; avec un curseur, les messages plus anciens.
+Un curseur qui n'appartient pas à cette conversation — inconnu ou venu d'une autre
+conversation — est refusé en `400 VALIDATION_FAILED`, jamais traité comme une page vide.
 `limit` vaut 50 par défaut et accepte de 1 à 50.
 
 ## Modération (tâche 4) — toutes ces routes exigent le rôle **modérateur**

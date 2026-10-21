@@ -255,6 +255,37 @@ describe('ConversationsService (PostgreSQL)', () => {
     ]));
   });
 
+  it('refuse un curseur absent de la conversation sans le confondre avec une page vide', async () => {
+    const organizer = await user(UserRole.Organizer);
+    const a = await user();
+    const b = await user();
+    const eventId = await event(organizer);
+    await registrations.register(a, eventId);
+    await registrations.register(b, eventId);
+    const { conversation } = await conversations.start(a, b);
+    const id = (conversation as Conversation).id;
+    const first = await conversations.send(a, id, 'Premier') as Message;
+    const second = await conversations.send(b, id, 'Deuxième') as Message;
+
+    // Une autre conversation du même membre fournit un curseur valide mais hors sujet.
+    const c = await user();
+    await registrations.register(c, eventId);
+    const otherId = ((await conversations.start(a, c)).conversation as Conversation).id;
+    const elsewhere = await conversations.send(a, otherId, 'Ailleurs') as Message;
+
+    for (const invalid of [randomUUID(), elsewhere.id, 'pas-un-uuid', '']) {
+      await expect(conversations.messages(a, id, invalid)).rejects.toMatchObject({
+        status: 400, response: { code: 'VALIDATION_FAILED' },
+      });
+    }
+    // Le curseur de la conversation reste accepté et la page la plus ancienne est vide,
+    // sans jamais prendre la place du refus ci-dessus.
+    expect((await conversations.messages(a, id, second.id)).map((message) => (message as Message).id))
+      .toEqual([first.id]);
+    expect(await conversations.messages(a, id, first.id)).toEqual([]);
+    expect((await conversations.messages(a, otherId, elsewhere.id))).toEqual([]);
+  });
+
   it('refuse lecture et écriture aux tiers, modérateur compris, sans exposer le contenu', async () => {
     const organizer = await user(UserRole.Organizer);
     const a = await user();
