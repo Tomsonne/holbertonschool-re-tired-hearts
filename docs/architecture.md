@@ -100,15 +100,22 @@ Exemple : s'inscrire à un événement.
 
 - **Fournisseur :** API Découpage administratif (`https://geo.api.gouv.fr`), service public français,
   gratuit, sans clé, usage raisonnable documenté.
-- **Point d'entrée :** `GET /communes?nom={q}&fields=nom,code,codesPostaux,codeDepartement&boost=population&limit=8`.
+- **Point d'entrée :** `GET /communes?nom={q}&fields=nom,code,codeDepartement,codesPostaux&boost=population&limit=8`.
 - **Bénéfice :** les membres et les organisateurs choisissent une vraie commune au lieu de la taper,
   ce qui rend le filtre par ville et par département fiable.
 - **Minimisation :** seul le texte saisi est envoyé, aucune donnée personnelle. On stocke la commune,
   le code postal, le département et le code INSEE — jamais de coordonnées.
 - **Résilience :** délai de 3 secondes (`AbortController`), forme de la réponse validée, résultats
-  mis en cache 24 h en mémoire. En cas d'échec, l'API répond `503 CITY_LOOKUP_UNAVAILABLE` et le
-  formulaire Vue bascule en saisie manuelle (ville + code postal) avec `location_verified = false`.
-  L'inscription, l'édition du profil et la création d'événement ne dépendent jamais du service tiers.
+  mis en cache 10 minutes en mémoire (100 termes au maximum, éviction du moins récemment utilisé ;
+  les échecs ne sont jamais mis en cache). En cas d'échec, l'API répond `503 CITY_LOOKUP_UNAVAILABLE`
+  et le formulaire Vue bascule en saisie manuelle (ville + code postal) avec
+  `location_verified = false`. L'inscription, l'édition du profil et la création d'événement ne
+  dépendent jamais du service tiers.
+- **Maîtrise de l'usage :** `GET /api/cities` est limité à 30 appels par tranche de 10 secondes et
+  par compte connecté (`429 TOO_MANY_REQUESTS`). Le cache ne protège pas d'une rafale de termes
+  différents, et le fournisseur limite à 10 requêtes par seconde pour notre unique adresse IP. La
+  fenêtre est courte pour borner la rafale elle-même, non seulement le volume horaire. Cette limite
+  borne un compte à la fois : si le trafic augmentait, il faudrait y ajouter un plafond global.
 
 ## Stratégie de tests
 

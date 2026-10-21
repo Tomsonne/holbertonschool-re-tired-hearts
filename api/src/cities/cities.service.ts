@@ -59,6 +59,8 @@ export class CitiesService {
       const url = new URL('https://geo.api.gouv.fr/communes');
       url.searchParams.set('nom', query.trim());
       url.searchParams.set('fields', 'nom,code,codeDepartement,codesPostaux');
+      // Les communes les plus peuplées d'abord : « Lyon » ne doit pas arriver après un homonyme.
+      url.searchParams.set('boost', 'population');
       url.searchParams.set('limit', '8');
       const cities = await Promise.race([
         (async () => {

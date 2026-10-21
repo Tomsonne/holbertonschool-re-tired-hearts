@@ -133,17 +133,19 @@ type OwnProfile = Omit<PublicProfile, 'location'> & {
 
 | Route | Accès | Réponse | Erreurs |
 |---|---|---|---|
-| `GET /api/cities?q=lyo` | actif | `200 { cityName, postalCodes: string[], departmentCode, cityCode }[]` (8 max) | `400` (`q` < 2 caractères), `503 CITY_LOOKUP_UNAVAILABLE` (délai de 3 s dépassé, erreur ou réponse invalide) → l'interface bascule en saisie manuelle |
+| `GET /api/cities?q=lyo` | actif | `200 { cityName, postalCodes: string[], departmentCode, cityCode }[]` (8 max) | `400` (`q` < 2 caractères), `503 CITY_LOOKUP_UNAVAILABLE` (délai de 3 s dépassé, erreur ou réponse invalide) → l'interface bascule en saisie manuelle, `429` (30 appels par tranche de 10 secondes et par compte) |
 
 Fournisseur : [API Découpage administratif, recherche de communes](https://geo.api.gouv.fr/decoupage-administratif/communes),
-appelée côté serveur avec `nom`, `fields` et `limit=8`. La
+appelée côté serveur avec `nom`, `fields`, `boost=population` et `limit=8`. La
 [FAQ officielle](https://guides.data.gouv.fr/foire-aux-questions) indique une limite de **10 requêtes
 par seconde et par IP** pour cette API. La recherche ne transmet que le texte saisi, jamais
 l'adresse ni le profil de l'utilisateur. Un cache mémoire par processus conserve au maximum 100
 requêtes normalisées pendant 10 minutes ; les échecs ne sont pas mis en cache. L'appel est interrompu
 après 3 secondes. Une réponse vide, une erreur ou un délai dépassé laisse la saisie manuelle
 possible ; une localisation manuelle est enregistrée avec `location_verified = false` et sans code
-INSEE.
+INSEE. Le cache ne protégeant pas d'une rafale de termes différents, la route est limitée à
+30 appels par tranche de 10 secondes et par compte connecté ; au-delà elle répond `429`, ce que
+l'interface traite comme un échec et bascule en saisie manuelle.
 
 ## Événements (tâche 2)
 

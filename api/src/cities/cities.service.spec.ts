@@ -45,6 +45,7 @@ describe('CitiesService', () => {
     expect(url.searchParams.get('nom')).toBe(query);
     expect(url.searchParams.get('fields')).toBe('nom,code,codeDepartement,codesPostaux');
     expect(url.searchParams.get('limit')).toBe('8');
+    expect(url.searchParams.get('boost')).toBe('population');
   });
 
   it('rejette une réponse invalide sans la cacher', async () => {
