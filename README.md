@@ -84,6 +84,18 @@ npm run migration:generate -- src/database/migrations/<NomEnPascalCase>
 Ne l'utiliser que sur une base de démonstration jetable, jamais sur la base habituelle ni sur un
 volume Docker partagé. Aucun volume Docker ne doit être supprimé pour cette procédure.
 
+À l'inverse, pour repartir d'une base de **développement** ou de **démonstration** vierge — celles
+que `db:reset` refuse — détruire le volume PostgreSQL puis rejouer les données de démonstration :
+
+```bash
+docker compose down -v && docker compose up --build -d   # volume neuf ; l'API rejoue les migrations
+cd api && npm run seed
+```
+
+Le volume recréé rejoue `docker/postgres-init`, donc la base `<DATABASE_NAME>_test` des tests revient
+elle aussi. `npm run typeorm -- schema:drop` n'est pas une alternative : il laisse en place les
+fonctions PostgreSQL créées par les migrations, que `migration:run` ne peut alors plus recréer.
+
 | Migration | Contenu |
 |---|---|
 | `InitialSchema` | Types énumérés, les 9 tables, clés, contraintes et index |
