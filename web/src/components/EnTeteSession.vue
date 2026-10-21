@@ -36,6 +36,7 @@ async function seDeconnecter(): Promise<void> {
       <p class="nav-session__nom">
         Connecté en tant que <strong>{{ session.utilisateur?.displayName }}</strong>
       </p>
+      <RouterLink v-if="session.peutVoirSorties" class="bouton bouton--secondaire" :to="{ name: 'sorties' }">Les sorties</RouterLink>
       <RouterLink v-if="session.estApprouve" class="bouton bouton--secondaire" :to="{ name: 'membres' }">Les membres</RouterLink>
       <RouterLink class="bouton bouton--secondaire" :to="{ name: 'mon-profil' }">Mon profil</RouterLink>
       <button type="button" class="bouton bouton--secondaire" :disabled="deconnexionEnCours" @click="seDeconnecter">

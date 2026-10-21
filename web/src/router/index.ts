@@ -42,6 +42,20 @@ export const router = createRouter({
       component: () => import('../views/MemberView.vue'),
       meta: { title: 'Profil d’un membre', connexionRequise: true },
     },
+    // Ouvertes à tout membre actif dont le profil n'est pas bloqué, même en attente : l'écran
+    // explique les refus, l'API refait ses contrôles.
+    {
+      path: '/sorties',
+      name: 'sorties',
+      component: () => import('../views/EventsView.vue'),
+      meta: { title: 'Les sorties', connexionRequise: true },
+    },
+    {
+      path: '/sorties/:eventId',
+      name: 'sortie',
+      component: () => import('../views/EventView.vue'),
+      meta: { title: 'Une sortie', connexionRequise: true },
+    },
   ],
 });
 
