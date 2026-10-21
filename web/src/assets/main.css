@@ -590,6 +590,161 @@ a.bouton {
   }
 }
 
+/* ---------- Découverte des membres ---------- */
+.champ select {
+  font: inherit;
+  width: 100%;
+  min-height: 52px;
+  padding: 0.6rem 0.8rem;
+  border: 2px solid var(--bordure-champ);
+  border-radius: var(--rayon);
+  background: var(--blanc-casse);
+  color: var(--encre);
+}
+
+.filtres {
+  margin-bottom: 2rem;
+}
+
+.champ select:disabled {
+  cursor: not-allowed;
+  color: var(--encre-douce);
+}
+
+.champ__erreur p {
+  margin: 0 0 0.5rem;
+}
+
+.filtres__champs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 0 1.5rem;
+}
+
+.filtres__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Titre ciblé après une recherche : pas de cadre de focus pour un élément non interactif. */
+.resultats h3:focus {
+  outline: none;
+}
+
+.resultats__resume {
+  font-weight: 700;
+}
+
+.liste-membres {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: 1.2rem;
+}
+
+.carte-membre {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.3rem;
+  min-width: 0;
+}
+
+.carte-membre p {
+  margin: 0;
+}
+
+.carte-membre__nom {
+  font-size: 1.3rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.carte-membre__nom a {
+  color: var(--vert);
+}
+
+.carte-membre__lieu,
+.fiche-membre__lieu {
+  font-weight: 700;
+}
+
+.carte-membre__detail {
+  color: var(--encre-douce);
+  margin-top: auto;
+}
+
+.badge {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0.15rem 0.7rem;
+  border: 1px solid var(--bordeaux);
+  border-radius: 999px;
+  color: var(--bordeaux);
+  font-family: var(--police-ornement);
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.fiche-membre .badge {
+  display: inline-block;
+}
+
+.liste-interets--compacte {
+  gap: 0.4rem;
+}
+
+.liste-interets--compacte li {
+  padding: 0.2rem 0.8rem;
+  font-size: 0.95rem;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1.25rem;
+}
+
+.pagination .bouton {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+}
+
+.pagination__position {
+  margin: 0;
+  font-weight: 700;
+}
+
+.lien-retour {
+  margin: 0 0 1rem;
+}
+
+.lien-retour a {
+  font-weight: 700;
+}
+
+.fiche-membre {
+  max-width: 46rem;
+}
+
+.fiche-membre__nom {
+  overflow-wrap: anywhere;
+}
+
+.fiche-membre__bio {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-style: italic;
+  margin: 1rem 0 1.5rem;
+}
+
 /* ---------- Centres d'intérêt ---------- */
 .liste-interets {
   list-style: none;

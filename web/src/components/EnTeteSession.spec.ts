@@ -29,6 +29,7 @@ async function monter() {
       { path: '/connexion', name: 'connexion', component: vide },
       { path: '/inscription', name: 'inscription', component: vide },
       { path: '/mon-profil', name: 'mon-profil', component: vide },
+      { path: '/membres', name: 'membres', component: vide },
     ],
   });
   await router.push('/page');
@@ -58,8 +59,11 @@ describe("zone de session de l'en-tête", () => {
     const { wrapper, router } = await monter();
 
     expect(wrapper.text()).toContain('Connecté en tant que Odette');
-    expect(wrapper.get('a').text()).toBe('Mon profil');
-    expect(wrapper.get('a').attributes('href')).toBe('/mon-profil');
+    // Profil approuvé : accès à la découverte des membres et à son profil.
+    expect(wrapper.findAll('a').map((a) => [a.text(), a.attributes('href')])).toEqual([
+      ['Les membres', '/membres'],
+      ['Mon profil', '/mon-profil'],
+    ]);
     await wrapper.get('button').trigger('click');
     await flushPromises();
 
@@ -67,6 +71,13 @@ describe("zone de session de l'en-tête", () => {
     expect(useSessionStore().estConnecte).toBe(false);
     expect(router.currentRoute.value.name).toBe('accueil');
     expect(wrapper.text()).toContain('Se connecter');
+  });
+
+  it("ne propose pas la découverte des membres à un profil en attente", async () => {
+    vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, profileStatus: 'pending' });
+    const { wrapper } = await monter();
+
+    expect(wrapper.findAll('a').map((a) => a.text())).toEqual(['Mon profil']);
   });
 
   it("signale une déconnexion échouée, reste connecté et permet de réessayer", async () => {

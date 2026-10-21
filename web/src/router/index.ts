@@ -29,6 +29,19 @@ export const router = createRouter({
       component: () => import('../views/ProfileView.vue'),
       meta: { title: 'Mon profil', connexionRequise: true },
     },
+    // Réservées aux profils approuvés : l'écran l'explique lui-même (R-PROF-3), l'API refuse aussi.
+    {
+      path: '/membres',
+      name: 'membres',
+      component: () => import('../views/DiscoveryView.vue'),
+      meta: { title: 'Les membres', connexionRequise: true },
+    },
+    {
+      path: '/membres/:userId',
+      name: 'membre',
+      component: () => import('../views/MemberView.vue'),
+      meta: { title: 'Profil d’un membre', connexionRequise: true },
+    },
   ],
 });
 
