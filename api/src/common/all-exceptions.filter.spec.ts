@@ -1,4 +1,4 @@
-import { HttpStatus, Logger, NotFoundException } from '@nestjs/common';
+import { HttpException, HttpStatus, Logger, NotFoundException } from '@nestjs/common';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 import { AppException } from './app.exception';
 
@@ -40,5 +40,43 @@ describe('AllExceptionsFilter', () => {
       code: 'NOT_FOUND',
       message: "Nous n'avons pas trouvé ce que vous cherchiez.",
     });
+  });
+
+  it('ne renvoie pas les détails d’une exception Nest non maîtrisée', () => {
+    const body = filter.toBody(
+      new HttpException(
+        {
+          statusCode: 500,
+          code: 'DATABASE_FAILURE',
+          message: 'Message privé : contenu de conversation',
+          details: [{ field: 'password', messages: ['secret interne'] }],
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      ),
+    );
+
+    expect(body).toEqual({
+      statusCode: 500,
+      code: 'INTERNAL_ERROR',
+      message: 'Une erreur est survenue de notre côté. Merci de réessayer plus tard.',
+    });
+    expect(JSON.stringify(body)).not.toMatch(/DATABASE_FAILURE|conversation|secret interne/);
+  });
+
+  it('masque aussi le payload d’une AppException avec un statut serveur', () => {
+    const body = filter.toBody(
+      new AppException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        'INTERNAL_FAILURE',
+        'Secret de conversation',
+      ),
+    );
+
+    expect(body).toEqual({
+      statusCode: 500,
+      code: 'INTERNAL_ERROR',
+      message: 'Une erreur est survenue de notre côté. Merci de réessayer plus tard.',
+    });
+    expect(JSON.stringify(body)).not.toContain('Secret de conversation');
   });
 });
