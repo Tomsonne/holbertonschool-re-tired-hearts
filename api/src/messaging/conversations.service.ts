@@ -10,6 +10,8 @@ export class ConversationsService {
   constructor(private readonly db: DataSource) {}
 
   async start(actorId: string, recipientId: string, eventId?: string): Promise<{ conversation: object; created: boolean }> {
+    actorId = actorId.toLowerCase();
+    recipientId = recipientId.toLowerCase();
     if (actorId === recipientId) {
       throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Vous ne pouvez pas vous écrire à vous-même.');
     }

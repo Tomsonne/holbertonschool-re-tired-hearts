@@ -22,8 +22,9 @@ describe('ConversationsService (PostgreSQL)', () => {
   const userIds: string[] = [];
   const eventIds: string[] = [];
 
-  async function user(role = UserRole.Member): Promise<string> {
+  async function user(role = UserRole.Member, id?: string): Promise<string> {
     const account = await db.manager.save(db.manager.create(User, {
+      ...(id ? { id } : {}),
       email: `${randomUUID()}@example.test`, passwordHash: 'integration-test-only',
       role, status: AccountStatus.Active,
     }));
@@ -129,6 +130,29 @@ describe('ConversationsService (PostgreSQL)', () => {
     expect(await db.manager.countBy(Conversation, {
       participantAId: [a, b].sort()[0], participantBId: [a, b].sort()[1],
     })).toBe(1);
+  });
+
+  it('normalise les UUID mixtes dans les deux sens et lors de créations concurrentes', async () => {
+    const organizer = await user(UserRole.Organizer);
+    // Dans les chaînes brutes, « B... » précède « a... », à l'inverse de l'ordre UUID.
+    const low = await user(UserRole.Member, `a${randomUUID().slice(1)}`);
+    const high = await user(UserRole.Member, `b${randomUUID().slice(1)}`);
+    const eventId = await event(organizer);
+    await registrations.register(low, eventId);
+    await registrations.register(high, eventId);
+
+    const results = await Promise.all([
+      conversations.start(low, high.toUpperCase(), eventId),
+      conversations.start(high.toUpperCase(), low, eventId),
+    ]);
+    expect(results.filter((result) => result.created)).toHaveLength(1);
+    const id = (results[0].conversation as Conversation).id;
+    expect((results[1].conversation as Conversation).id).toBe(id);
+    expect((await conversations.start(high, low.toUpperCase())).conversation).toMatchObject({ id });
+    expect(await db.manager.countBy(Conversation, { participantAId: low, participantBId: high })).toBe(1);
+    await expect(conversations.start(low, low.toUpperCase())).rejects.toMatchObject({
+      status: 400, response: { code: 'VALIDATION_FAILED' },
+    });
   });
 
   it('autorise un premier contact après la fin de la sortie si les inscriptions restent actives', async () => {
