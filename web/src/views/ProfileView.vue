@@ -101,6 +101,11 @@ const profilVide = computed(() => {
   return !!p && p.interests.length === 0 && p.location === null && !p.bio && p.lookingFor.length === 0;
 });
 
+// Plafond atteint : les cases restantes sont désactivées et un message l'explique tout de suite,
+// plutôt qu'une erreur à l'enregistrement.
+const plafondInterets = computed(() => form.interets.length >= MAX_INTERETS);
+const caseBloquee = (id: number) => plafondInterets.value && !form.interets.includes(id);
+
 const manques = computed(() => (profil.value?.missingForApproval ?? []).filter((m) => m in MANQUES));
 
 // R-LOC-2 : les membres ne voient que « Ville (département) ».
@@ -494,6 +499,12 @@ const membreDepuis = computed(() =>
               De 1 à {{ MAX_INTERETS }}. Ils servent à vous proposer des sorties et des membres proches de vos goûts.
               <span class="compteur">{{ form.interets.length }} sur {{ MAX_INTERETS }} choisis.</span>
             </p>
+            <!-- Toujours présent dans la page : le lecteur d'écran annonce le message dès qu'il apparaît. -->
+            <p id="profil-interets-plafond" class="champ__aide" aria-live="polite">
+              <template v-if="plafondInterets">
+                Vous avez choisi le maximum de {{ MAX_INTERETS }}. Décochez-en un pour en choisir un autre.
+              </template>
+            </p>
             <p v-if="erreursChamps.interets" :id="`${IDS.interets}-erreur`" class="champ__erreur">
               {{ erreursChamps.interets }}
             </p>
@@ -502,7 +513,14 @@ const membreDepuis = computed(() =>
             </p>
             <div v-else class="grille-choix">
               <label v-for="interet in referentiel" :key="interet.id" class="choix">
-                <input v-model="form.interets" type="checkbox" name="interestIds" :value="interet.id" />
+                <input
+                  v-model="form.interets"
+                  type="checkbox"
+                  name="interestIds"
+                  :value="interet.id"
+                  :disabled="caseBloquee(interet.id)"
+                  :aria-describedby="caseBloquee(interet.id) ? 'profil-interets-plafond' : undefined"
+                />
                 <span>{{ interet.label }}</span>
               </label>
             </div>

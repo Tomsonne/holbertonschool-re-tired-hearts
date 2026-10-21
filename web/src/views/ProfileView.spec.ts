@@ -313,21 +313,33 @@ describe('écran « Mon profil »', () => {
       expect(profilApi.updateMyProfile).not.toHaveBeenCalled();
     });
 
-    it("limite le choix à 10 centres d'intérêt", async () => {
+    it("au 10e centre d'intérêt, désactive les autres cases et l'explique tout de suite", async () => {
       const douze = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, slug: `i${i}`, label: `Intérêt ${i + 1}` }));
       vi.mocked(interestsApi.fetchInterests).mockResolvedValue(douze);
       vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
       const wrapper = await monter();
+      const cases = () => wrapper.findAll<HTMLInputElement>('input[name="interestIds"]');
+      const plafond = () => wrapper.get('#profil-interets-plafond');
 
-      for (const caseACocher of wrapper.findAll('input[name="interestIds"]').slice(0, 11)) await caseACocher.setValue(true);
-      expect(wrapper.text()).toContain('11 sur 10 choisis.');
-      await envoyer(wrapper);
+      for (const caseACocher of cases().slice(0, 9)) await caseACocher.setValue(true);
+      expect(plafond().text()).toBe('');
+      expect(cases().every((c) => !c.element.disabled)).toBe(true);
 
-      expect(wrapper.get('#profil-interets-erreur').text()).toContain('au plus 10');
-      expect(wrapper.get('#profil-interets').attributes('aria-describedby')).toBe(
-        'profil-interets-aide profil-interets-erreur',
-      );
-      expect(profilApi.updateMyProfile).not.toHaveBeenCalled();
+      await cases()[9].setValue(true);
+      expect(wrapper.text()).toContain('10 sur 10 choisis.');
+      expect(plafond().text()).toContain('Vous avez choisi le maximum de 10');
+      expect(plafond().attributes('aria-live')).toBe('polite');
+      // Les cases cochées restent modifiables, les deux autres sont désactivées et expliquées.
+      expect(cases().map((c) => c.element.disabled)).toEqual([...Array(10).fill(false), true, true]);
+      expect(cases()[10].attributes('aria-describedby')).toBe('profil-interets-plafond');
+
+      await cases()[0].setValue(false);
+      expect(cases().every((c) => !c.element.disabled)).toBe(true);
+      expect(plafond().text()).toBe('');
+
+      // On peut alors échanger un centre d'intérêt contre un autre.
+      await cases()[10].setValue(true);
+      expect(wrapper.text()).toContain('10 sur 10 choisis.');
     });
   });
 

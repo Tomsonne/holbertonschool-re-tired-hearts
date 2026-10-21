@@ -512,6 +512,18 @@ a.bouton {
   cursor: pointer;
 }
 
+/* Case désactivée (plafond atteint) : texte toujours lisible, mais l'apparence montre l'indisponibilité. */
+.choix:has(input:disabled) {
+  cursor: not-allowed;
+  color: var(--encre-douce);
+}
+.choix:has(input:disabled):hover {
+  background: none;
+}
+.choix input:disabled {
+  cursor: not-allowed;
+}
+
 .compteur {
   font-style: normal;
   font-weight: 700;
