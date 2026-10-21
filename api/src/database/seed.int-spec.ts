@@ -4,7 +4,9 @@ import { DataSource } from 'typeorm';
 import { EventRegistration, RegistrationStatus } from '../events/event-registration.entity';
 import { Event, EventStatus } from '../events/event.entity';
 import { RegistrationsService } from '../events/registrations.service';
+import { Interest } from '../interests/interest.entity';
 import { Conversation } from '../messaging/conversation.entity';
+import { ProfileInterest } from '../profiles/profile-interest.entity';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { buildDataSourceOptions } from './typeorm.config';
@@ -120,6 +122,92 @@ describe('seed complet (PostgreSQL jetable)', () => {
     }
     return { demoMembers, foreignIds };
   }
+
+  async function foreignMember(): Promise<string> {
+    const foreign = await db.manager.save(db.manager.create(User, {
+      email: `${randomUUID()}@example.test`, passwordHash: 'integration-test-only',
+      role: UserRole.Member, status: AccountStatus.Active,
+    }));
+    await db.manager.save(db.manager.create(Profile, {
+      userId: foreign.id, displayName: 'Autre membre', cityName: 'Lyon',
+      departmentCode: '69', status: ProfileStatus.Approved,
+    }));
+    return foreign.id;
+  }
+
+  async function demoEvent(organizerId: string, overrides: Partial<Event> = {}): Promise<Event> {
+    const interest = await db.manager.findOneByOrFail(Interest, { slug: DEMO_EVENTS[0].interestSlug });
+    const startsAt = new Date(Date.now() + DEMO_EVENTS[0].daysFromNow * 86400000);
+    return db.manager.save(db.manager.create(Event, {
+      id: DEMO_EVENTS[0].id, organizerId, interestId: interest.id,
+      title: DEMO_EVENTS[0].title,
+      description: 'Sortie entièrement fictive pour explorer la démonstration.',
+      startsAt, endsAt: new Date(startsAt.getTime() + 7200000),
+      cityName: 'Lyon', departmentCode: '69', postalCode: '69000',
+      exactAddress: '1 rue Imaginaire, 69000 Lyon', capacity: DEMO_EVENTS[0].capacity,
+      status: EventStatus.Published, publishedAt: new Date(), ...overrides,
+    }));
+  }
+
+  // Le seed a échoué : il ne doit rester aucune des lignes qu'il écrit. Chaque test
+  // annonce ce qui préexistait pour que le reste soit compté comme une trace.
+  async function expectRolledBack(absentEmails: string[], preexisting: {
+    users: number; profiles: number; events: number; registrations: number;
+  }): Promise<void> {
+    const users = await demoUsers();
+    for (const email of absentEmails) expect(users.get(email)).toBeUndefined();
+    expect(await db.manager.count(User)).toBe(preexisting.users);
+    expect(await db.manager.count(Profile)).toBe(preexisting.profiles);
+    expect(await db.manager.count(ProfileInterest)).toBe(0);
+    expect(await db.manager.count(Event)).toBe(preexisting.events);
+    expect(await db.manager.count(EventRegistration)).toBe(preexisting.registrations);
+    expect(await db.manager.count(Conversation)).toBe(0);
+  }
+
+  it('ne laisse aucun compte créé quand la seconde étape échoue sur une base vierge', async () => {
+    // Un tiers occupe déjà l'identifiant de la première sortie de démonstration : le seed
+    // crée ses quatre comptes, puis la seconde étape refuse cet identifiant.
+    const stranger = await db.manager.save(db.manager.create(User, {
+      email: `${randomUUID()}@example.test`, passwordHash: 'integration-test-only',
+      role: UserRole.Organizer, status: AccountStatus.Active,
+    }));
+    await demoEvent(stranger.id, { title: 'Sortie sans rapport' });
+
+    await expect(seedDemoData(db, password)).rejects.toThrow('déjà utilisé');
+    await expectRolledBack(DEMO_ACCOUNTS.map((account) => account.email),
+      { users: 1, profiles: 0, events: 1, registrations: 0 });
+  });
+
+  it('ne conserve aucun compte créé quand la capacité manque au premier passage', async () => {
+    // Seul l'organisateur de démonstration préexiste, avec sa sortie déjà complète : le
+    // seed crée les trois autres comptes avant de buter sur les places.
+    const organizer = await db.manager.save(db.manager.create(User, {
+      email: DEMO_ACCOUNTS[1].email, passwordHash: 'integration-test-only',
+      role: UserRole.Organizer, status: AccountStatus.Active,
+    }));
+    await db.manager.save(db.manager.create(Profile, {
+      userId: organizer.id, displayName: DEMO_ACCOUNTS[1].displayName,
+      cityName: DEMO_ACCOUNTS[1].cityName, departmentCode: DEMO_ACCOUNTS[1].departmentCode,
+      allowMessages: true, status: ProfileStatus.Approved, reviewedAt: new Date(),
+    }));
+    await demoEvent(organizer.id);
+    for (let index = 0; index < DEMO_EVENTS[0].capacity; index++) {
+      await db.manager.save(db.manager.create(EventRegistration, {
+        eventId: DEMO_EVENTS[0].id, userId: await foreignMember(),
+        status: RegistrationStatus.Registered,
+      }));
+    }
+
+    await expect(seedDemoData(db, password)).rejects.toThrow('places insuffisantes');
+    const seeded = [DEMO_ACCOUNTS[0], DEMO_ACCOUNTS[2], DEMO_ACCOUNTS[3]].map((account) => account.email);
+    await expectRolledBack(seeded, {
+      users: 1 + DEMO_EVENTS[0].capacity, profiles: 1 + DEMO_EVENTS[0].capacity,
+      events: 1, registrations: DEMO_EVENTS[0].capacity,
+    });
+    // L'organisateur préexistant garde son compte et sa sortie.
+    expect(await db.manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[1].email })).toMatchObject({ id: organizer.id });
+    expect(await db.manager.findOneByOrFail(Event, { id: DEMO_EVENTS[0].id })).toMatchObject({ organizerId: organizer.id });
+  });
 
   it('crée des relations valides au premier passage', async () => {
     expect(await seedDemoData(db, password)).toEqual(DEMO_ACCOUNTS.map((account) => account.email));

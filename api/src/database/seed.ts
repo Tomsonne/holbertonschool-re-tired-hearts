@@ -108,100 +108,113 @@ async function createAccount(
   return 'created';
 }
 
-export async function seedDemoAccounts(db: DataSource, password: string): Promise<string[]> {
+function assertDemoPassword(password: string): void {
   if (password.length < 12 || password.length > 128) {
     throw new Error('DEMO_PASSWORD doit contenir entre 12 et 128 caractères.');
   }
-
-  return db.transaction(async (manager) => {
-    const interests = await manager.find(Interest);
-    const interestsBySlug = new Map(interests.map((interest) => [interest.slug, interest.id]));
-    const created: string[] = [];
-    for (const account of DEMO_ACCOUNTS) {
-      if ((await createAccount(manager, account, password, interestsBySlug)) === 'created') {
-        created.push(account.email);
-      }
-    }
-    return created;
-  });
 }
 
-export async function seedDemoData(db: DataSource, password: string): Promise<string[]> {
-  const created = await seedDemoAccounts(db, password);
-  await db.transaction('READ COMMITTED', async (manager) => {
-    const interests = await manager.find(Interest);
-    const interestsBySlug = new Map(interests.map((interest) => [interest.slug, interest.id]));
-    const organizer = await manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[1].email });
-    const member1 = await manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[2].email });
-    const member2 = await manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[3].email });
-    for (const [user, definition] of [[organizer, DEMO_ACCOUNTS[1]], [member1, DEMO_ACCOUNTS[2]],
-      [member2, DEMO_ACCOUNTS[3]]] as const) {
-      const profile = await manager.findOneBy(Profile, { userId: user.id });
-      if (user.status !== AccountStatus.Active || profile?.status !== ProfileStatus.Approved ||
-          !profile.allowMessages || profile.displayName !== definition.displayName) {
-        throw new Error(`Compte de démonstration non éligible : ${user.email}. Aucune donnée n'a été modifiée.`);
-      }
+async function seedAccounts(manager: EntityManager, password: string): Promise<string[]> {
+  const interests = await manager.find(Interest);
+  const interestsBySlug = new Map(interests.map((interest) => [interest.slug, interest.id]));
+  const created: string[] = [];
+  for (const account of DEMO_ACCOUNTS) {
+    if ((await createAccount(manager, account, password, interestsBySlug)) === 'created') {
+      created.push(account.email);
     }
-    const now = new Date();
-    let conversationContextAvailable = false;
-    for (const definition of DEMO_EVENTS) {
-      let event = await manager.findOneBy(Event, { id: definition.id });
-      if (event) event = await lockEvent(manager, definition.id);
-      if (event && (event.organizerId !== organizer.id || event.title !== definition.title)) {
-        throw new Error(`Identifiant d'événement de démonstration déjà utilisé : ${definition.id}.`);
-      }
-      if (!event) {
-        const interestId = interestsBySlug.get(definition.interestSlug);
-        if (interestId === undefined) throw new Error(`Centre d'intérêt introuvable : ${definition.interestSlug}.`);
-        const startsAt = new Date(now.getTime() + definition.daysFromNow * 86400000);
-        event = await manager.save(manager.create(Event, {
-          id: definition.id, organizerId: organizer.id, interestId,
-          title: definition.title,
-          description: 'Sortie entièrement fictive pour explorer la démonstration.',
-          startsAt, endsAt: new Date(startsAt.getTime() + 7200000),
-          cityName: 'Lyon', departmentCode: '69', postalCode: '69000', cityCode: null,
-          locationVerified: false, areaHint: 'Lieu fictif de démonstration',
-          exactAddress: '1 rue Imaginaire, 69000 Lyon', capacity: definition.capacity,
-          status: EventStatus.Published, publishedAt: now,
-        }));
-      }
-      // Une sortie passée ou modifiée reste intacte lors d'un rejeu ultérieur.
-      if (event.status !== EventStatus.Published || event.startsAt <= now) continue;
-      if (definition.id === DEMO_EVENTS[0].id) conversationContextAvailable = true;
-      const missingMembers: User[] = [];
-      for (const member of [member1, member2]) {
-        if (!await manager.findOneBy(EventRegistration, { eventId: event.id, userId: member.id })) {
-          missingMembers.push(member);
-        }
-      }
-      const registeredCount = await manager.countBy(EventRegistration, {
-        eventId: event.id, status: RegistrationStatus.Registered,
-      });
-      if (missingMembers.length > event.capacity - registeredCount) {
-        throw new Error(`Sortie de démonstration ${definition.id} : places insuffisantes pour ${missingMembers.length} inscription(s).`);
-      }
-      for (const member of missingMembers) {
-        // Une ligne withdrawn existante n'est jamais réactivée par le seed.
-        await manager.save(manager.create(EventRegistration, {
-          eventId: event.id, userId: member.id, status: RegistrationStatus.Registered,
-        }));
-      }
-    }
-    for (const [first, second] of [[organizer, member1], [member1, member2]] as const) {
-      const [participantAId, participantBId] = [first.id, second.id].sort();
-      const firstRegistered = first.id === organizer.id ||
-        (await manager.findOneBy(EventRegistration, { eventId: DEMO_EVENTS[0].id, userId: first.id }))?.status === RegistrationStatus.Registered;
-      const secondRegistered = second.id === organizer.id ||
-        (await manager.findOneBy(EventRegistration, { eventId: DEMO_EVENTS[0].id, userId: second.id }))?.status === RegistrationStatus.Registered;
-      if (conversationContextAvailable && firstRegistered && secondRegistered &&
-          !await manager.findOneBy(Conversation, { participantAId, participantBId })) {
-        await manager.save(manager.create(Conversation, {
-          participantAId, participantBId, contextEventId: DEMO_EVENTS[0].id,
-        }));
-      }
-    }
-  });
+  }
   return created;
+}
+
+export async function seedDemoAccounts(db: DataSource, password: string): Promise<string[]> {
+  assertDemoPassword(password);
+  return db.transaction(async (manager) => seedAccounts(manager, password));
+}
+
+async function seedDemoGraph(manager: EntityManager): Promise<void> {
+  const interests = await manager.find(Interest);
+  const interestsBySlug = new Map(interests.map((interest) => [interest.slug, interest.id]));
+  const organizer = await manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[1].email });
+  const member1 = await manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[2].email });
+  const member2 = await manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[3].email });
+  for (const [user, definition] of [[organizer, DEMO_ACCOUNTS[1]], [member1, DEMO_ACCOUNTS[2]],
+    [member2, DEMO_ACCOUNTS[3]]] as const) {
+    const profile = await manager.findOneBy(Profile, { userId: user.id });
+    if (user.status !== AccountStatus.Active || profile?.status !== ProfileStatus.Approved ||
+        !profile.allowMessages || profile.displayName !== definition.displayName) {
+      throw new Error(`Compte de démonstration non éligible : ${user.email}. Aucune donnée n'a été modifiée.`);
+    }
+  }
+  const now = new Date();
+  let conversationContextAvailable = false;
+  for (const definition of DEMO_EVENTS) {
+    let event = await manager.findOneBy(Event, { id: definition.id });
+    if (event) event = await lockEvent(manager, definition.id);
+    if (event && (event.organizerId !== organizer.id || event.title !== definition.title)) {
+      throw new Error(`Identifiant d'événement de démonstration déjà utilisé : ${definition.id}.`);
+    }
+    if (!event) {
+      const interestId = interestsBySlug.get(definition.interestSlug);
+      if (interestId === undefined) throw new Error(`Centre d'intérêt introuvable : ${definition.interestSlug}.`);
+      const startsAt = new Date(now.getTime() + definition.daysFromNow * 86400000);
+      event = await manager.save(manager.create(Event, {
+        id: definition.id, organizerId: organizer.id, interestId,
+        title: definition.title,
+        description: 'Sortie entièrement fictive pour explorer la démonstration.',
+        startsAt, endsAt: new Date(startsAt.getTime() + 7200000),
+        cityName: 'Lyon', departmentCode: '69', postalCode: '69000', cityCode: null,
+        locationVerified: false, areaHint: 'Lieu fictif de démonstration',
+        exactAddress: '1 rue Imaginaire, 69000 Lyon', capacity: definition.capacity,
+        status: EventStatus.Published, publishedAt: now,
+      }));
+    }
+    // Une sortie passée ou modifiée reste intacte lors d'un rejeu ultérieur.
+    if (event.status !== EventStatus.Published || event.startsAt <= now) continue;
+    if (definition.id === DEMO_EVENTS[0].id) conversationContextAvailable = true;
+    const missingMembers: User[] = [];
+    for (const member of [member1, member2]) {
+      if (!await manager.findOneBy(EventRegistration, { eventId: event.id, userId: member.id })) {
+        missingMembers.push(member);
+      }
+    }
+    const registeredCount = await manager.countBy(EventRegistration, {
+      eventId: event.id, status: RegistrationStatus.Registered,
+    });
+    if (missingMembers.length > event.capacity - registeredCount) {
+      throw new Error(`Sortie de démonstration ${definition.id} : places insuffisantes pour ${missingMembers.length} inscription(s).`);
+    }
+    for (const member of missingMembers) {
+      // Une ligne withdrawn existante n'est jamais réactivée par le seed.
+      await manager.save(manager.create(EventRegistration, {
+        eventId: event.id, userId: member.id, status: RegistrationStatus.Registered,
+      }));
+    }
+  }
+  for (const [first, second] of [[organizer, member1], [member1, member2]] as const) {
+    const [participantAId, participantBId] = [first.id, second.id].sort();
+    const firstRegistered = first.id === organizer.id ||
+      (await manager.findOneBy(EventRegistration, { eventId: DEMO_EVENTS[0].id, userId: first.id }))?.status === RegistrationStatus.Registered;
+    const secondRegistered = second.id === organizer.id ||
+      (await manager.findOneBy(EventRegistration, { eventId: DEMO_EVENTS[0].id, userId: second.id }))?.status === RegistrationStatus.Registered;
+    if (conversationContextAvailable && firstRegistered && secondRegistered &&
+        !await manager.findOneBy(Conversation, { participantAId, participantBId })) {
+      await manager.save(manager.create(Conversation, {
+        participantAId, participantBId, contextEventId: DEMO_EVENTS[0].id,
+      }));
+    }
+  }
+}
+
+// Comptes, profils, sorties, inscriptions et conversations partagent une seule
+// transaction : un échec en cours de route — places insuffisantes, identifiant de
+// sortie déjà pris — ne laisse derrière lui ni compte ni profil créé au passage.
+export async function seedDemoData(db: DataSource, password: string): Promise<string[]> {
+  assertDemoPassword(password);
+  return db.transaction('READ COMMITTED', async (manager) => {
+    const created = await seedAccounts(manager, password);
+    await seedDemoGraph(manager);
+    return created;
+  });
 }
 
 export function assertDemoSeedAllowed(environment: NodeJS.ProcessEnv): void {
