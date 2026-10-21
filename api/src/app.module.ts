@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { ModerationModule } from './moderation/moderation.module';
+import { CitiesModule } from './cities/cities.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ModerationModule } from './moderation/moderation.module';
     EventsModule,
     MessagingModule,
     ModerationModule,
+    CitiesModule,
   ],
 })
 export class AppModule {}

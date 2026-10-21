@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ApiError } from '../api/http';
+import { searchCities, type CityResult } from '../api/cities';
 import { fetchInterests, type Interest } from '../api/interests';
 import {
   fetchMyProfile,
@@ -42,6 +43,21 @@ const envoiEnCours = ref(false);
 const enregistre = ref(false);
 const erreursChamps = reactive<Partial<Record<Champ, string>>>({});
 const erreurGenerale = ref<string | null>(null);
+const suggestions = ref<CityResult[]>([]);
+const rechercheManuelle = ref(false);
+const rechercheEnCours = ref(false);
+const communeChoisie = ref<CityResult | null>(null);
+const localisationModifiee = ref(false);
+let rechercheTimer: ReturnType<typeof setTimeout> | undefined;
+let rechercheVersion = 0;
+
+function invaliderRecherche(): number {
+  clearTimeout(rechercheTimer);
+  rechercheTimer = undefined;
+  rechercheEnCours.value = false;
+  suggestions.value = [];
+  return ++rechercheVersion;
+}
 
 const resumeErreurs = ref<HTMLElement | null>(null);
 const messageSucces = ref<HTMLElement | null>(null);
@@ -123,6 +139,7 @@ const listeErreurs = computed(() =>
 const aDesErreurs = computed(() => listeErreurs.value.length > 0 || erreurGenerale.value !== null);
 
 function remplirFormulaire(p: OwnProfile): void {
+  invaliderRecherche();
   form.nomAffiche = p.displayName;
   form.presentation = p.bio ?? '';
   form.recherche = [...p.lookingFor];
@@ -130,8 +147,55 @@ function remplirFormulaire(p: OwnProfile): void {
   form.ville = p.location?.cityName ?? '';
   form.codePostal = p.location?.postalCode ?? '';
   form.departement = p.location?.departmentCode ?? '';
+  communeChoisie.value = null;
+  localisationModifiee.value = false;
+  rechercheManuelle.value = false;
   form.decouvrable = p.discoverable;
   form.accepteMessages = p.allowMessages;
+}
+
+function saisirVille(): void {
+  localisationModifiee.value = true;
+  communeChoisie.value = null;
+  const version = invaliderRecherche();
+  const query = form.ville.trim();
+  if (rechercheManuelle.value || query.length < 2) return;
+  rechercheTimer = setTimeout(async () => {
+    rechercheTimer = undefined;
+    rechercheEnCours.value = true;
+    try {
+      const resultats = await searchCities(query);
+      if (version !== rechercheVersion) return;
+      suggestions.value = resultats;
+      if (resultats.length === 0) rechercheManuelle.value = true;
+    } catch {
+      if (version === rechercheVersion) rechercheManuelle.value = true;
+    } finally {
+      if (version === rechercheVersion) rechercheEnCours.value = false;
+    }
+  }, 300);
+}
+
+function choisirCommune(commune: CityResult): void {
+  invaliderRecherche();
+  communeChoisie.value = commune;
+  form.ville = commune.cityName;
+  form.departement = commune.departmentCode;
+  form.codePostal = commune.postalCodes[0] ?? '';
+  localisationModifiee.value = true;
+}
+
+function saisirLocalisation(): void {
+  // La commune choisie n'est pas annulée ici : selectionValide revalide ville, département et
+  // code postal à l'enregistrement. Un autre code postal de la même commune — Toulouse en a six —
+  // garde donc son code INSEE, et un code étranger reste refusé par ce même garde.
+  localisationModifiee.value = true;
+}
+
+function passerEnManuel(): void {
+  invaliderRecherche();
+  rechercheManuelle.value = true;
+  saisirLocalisation();
 }
 
 function recevoirProfil(p: OwnProfile): void {
@@ -157,6 +221,7 @@ async function charger(): Promise<void> {
 }
 
 onMounted(charger);
+onUnmounted(invaliderRecherche);
 
 function viderErreurs(): void {
   (Object.keys(LIBELLES) as Champ[]).forEach((champ) => delete erreursChamps[champ]);
@@ -207,7 +272,10 @@ function construireRequete(): ProfileInput {
     avant !== null &&
     avant.cityName === ville &&
     avant.postalCode === (codePostal || null) &&
-    avant.departmentCode === departement;
+    avant.departmentCode === departement && !localisationModifiee.value;
+  const selectionValide = communeChoisie.value?.cityName === ville &&
+    communeChoisie.value?.departmentCode === departement &&
+    communeChoisie.value?.postalCodes.includes(codePostal);
   const presentation = form.presentation.trim();
 
   return {
@@ -220,8 +288,8 @@ function construireRequete(): ProfileInput {
           cityName: ville,
           postalCode: codePostal || null,
           departmentCode: departement,
-          cityCode: inchangee ? avant.cityCode : null,
-          verified: inchangee ? avant.verified : false,
+          cityCode: selectionValide ? communeChoisie.value!.cityCode : inchangee ? avant.cityCode : null,
+          verified: selectionValide ? true : inchangee ? avant.verified : false,
         }
       : null,
     discoverable: form.decouvrable,
@@ -541,6 +609,7 @@ const membreDepuis = computed(() =>
               <input
                 :id="IDS.ville"
                 v-model="form.ville"
+                @input="saisirVille"
                 type="text"
                 name="cityName"
                 autocomplete="address-level2"
@@ -548,6 +617,16 @@ const membreDepuis = computed(() =>
                 :aria-invalid="erreursChamps.ville ? 'true' : undefined"
                 :aria-describedby="descriptionChamp('ville', 'profil-ville-aide')"
               />
+              <p v-if="rechercheEnCours" role="status">Recherche de communes…</p>
+              <ul v-if="suggestions.length && !rechercheManuelle" aria-label="Communes proposées">
+                <li v-for="commune in suggestions" :key="commune.cityCode">
+                  <button type="button" @click="choisirCommune(commune)">
+                    {{ commune.cityName }} ({{ commune.departmentCode }}) — {{ commune.postalCodes.join(', ') }}
+                  </button>
+                </li>
+              </ul>
+              <p v-if="rechercheManuelle" role="status">Recherche indisponible ou sans résultat : saisissez la ville et le département ci-dessous. Le code postal est facultatif.</p>
+              <button v-if="!rechercheManuelle" type="button" @click="passerEnManuel">Saisir ma ville manuellement</button>
               <p v-if="erreursChamps.ville" :id="`${IDS.ville}-erreur`" class="champ__erreur">
                 {{ erreursChamps.ville }}
               </p>
@@ -560,6 +639,7 @@ const membreDepuis = computed(() =>
                 <input
                   :id="IDS.codePostal"
                   v-model="form.codePostal"
+                  @input="saisirLocalisation"
                   type="text"
                   name="postalCode"
                   inputmode="numeric"
@@ -579,6 +659,7 @@ const membreDepuis = computed(() =>
                 <input
                   :id="IDS.departement"
                   v-model="form.departement"
+                  @input="saisirLocalisation"
                   type="text"
                   name="departmentCode"
                   maxlength="3"
