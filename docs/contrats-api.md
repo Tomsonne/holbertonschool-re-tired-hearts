@@ -101,8 +101,8 @@ type Me = {
 |---|---|---|---|---|
 | `GET /api/me/profile` | actif | — | `200 OwnProfile` (y compris profil `blocked`, en lecture seule) | `401 UNAUTHENTICATED`, `401 SESSION_EXPIRED`, `403 ACCOUNT_SUSPENDED` |
 | `PUT /api/me/profile` | actif, profil non bloqué | `ProfileInput` | `200 OwnProfile` (le statut n'est jamais modifié) | `400 VALIDATION_FAILED` (champ inconnu, `location: null` sur un profil approuvé, centre d'intérêt inconnu), `401`, `403 ACCOUNT_SUSPENDED`, `403 PROFILE_BLOCKED` |
-| `GET /api/profiles?interestId=&departmentCode=&page=` | approuvé | — | `200 Page<PublicProfile>` | `403 PROFILE_NOT_APPROVED` |
-| `GET /api/profiles/:userId` | approuvé | — | `200 PublicProfile` | `404 PROFILE_UNAVAILABLE` (même réponse pour en attente, bloqué, masqué, suspendu, inconnu) |
+| `GET /api/profiles?interestId=&departmentCode=&page=` | approuvé | — | `200 Page<PublicProfile>` : 20 par page, inscrits les plus récents d'abord, visiteur exclu | `400 VALIDATION_FAILED` (filtre invalide), `401`, `403 PROFILE_NOT_APPROVED`, `403 PROFILE_BLOCKED`, `429` (60 requêtes par minute) |
+| `GET /api/profiles/:userId` | approuvé | — | `200 PublicProfile` | `404 PROFILE_UNAVAILABLE` (même réponse pour en attente, bloqué, masqué, suspendu, inconnu, soi-même ou identifiant mal formé), `401`, `403 PROFILE_NOT_APPROVED`, `403 PROFILE_BLOCKED`, `429` |
 
 ```ts
 type ProfileInput = {            // ni role, ni status, ni email : champ inconnu → 400
