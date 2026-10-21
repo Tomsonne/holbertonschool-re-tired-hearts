@@ -29,6 +29,7 @@ const visiteur: Me = {
 };
 
 const ID = '11111111-1111-1111-1111-111111111111';
+const ID_B = '33333333-3333-3333-3333-333333333333';
 
 function resume(n: number, surcharge: Partial<EventSummary> = {}): EventSummary {
   return {
@@ -365,6 +366,66 @@ describe("détail d'une sortie", () => {
     expect(document.activeElement).toBe(alerte.element);
     expect(wrapper.get('#titre-bandeau-sortie').text()).toBe('Sortie complète');
     expect(wrapper.find('.inscription-sortie button').exists()).toBe(false);
+  });
+
+  it('ignore une inscription de A résolue sur B, même si la relecture échoue', async () => {
+    let terminer!: (result: Awaited<ReturnType<typeof sortiesApi.inscrire>>) => void;
+    vi.mocked(sortiesApi.inscrire).mockReturnValue(new Promise((resolve) => { terminer = resolve; }));
+    vi.mocked(sortiesApi.fetchEvent)
+      .mockResolvedValueOnce(detail())
+      .mockResolvedValueOnce(detail({ id: ID_B, title: 'Sortie B', availablePlaces: 4 }))
+      .mockRejectedValue(new ApiError(0, 'NETWORK_ERROR', 'Indisponible'));
+    const wrapper = await monter(`/sorties/${ID}`);
+    await wrapper.get('.inscription-sortie button').trigger('click');
+    await router.push(`/sorties/${ID_B}`);
+    await flushPromises();
+    terminer({ status: 'registered', availablePlaces: 3 });
+    await flushPromises();
+
+    expect(wrapper.get('.fiche-sortie__titre').text()).toBe('Sortie B');
+    expect(wrapper.text()).not.toContain('Vous êtes inscrit');
+    expect(wrapper.text()).toContain('4 places restantes sur 12');
+    expect(boutons(wrapper.get('.inscription-sortie'))).toEqual(['M’inscrire à cette sortie']);
+    expect(sortiesApi.fetchEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignore une erreur de désinscription de A après A→B→A', async () => {
+    let echouer!: (error: Error) => void;
+    vi.mocked(sortiesApi.desinscrire).mockReturnValue(new Promise((_resolve, reject) => { echouer = reject; }));
+    vi.mocked(sortiesApi.fetchEvent)
+      .mockResolvedValueOnce(detail({ myRegistration: 'registered', canRegister: false }))
+      .mockResolvedValueOnce(detail({ id: ID_B, title: 'Sortie B' }))
+      .mockResolvedValueOnce(detail());
+    const wrapper = await monter(`/sorties/${ID}`);
+    await wrapper.get('.inscription-sortie button').trigger('click');
+    await wrapper.get('.confirmation .bouton:not(.bouton--secondaire)').trigger('click');
+    await router.push(`/sorties/${ID_B}`);
+    await flushPromises();
+    await router.push(`/sorties/${ID}`);
+    await flushPromises();
+    echouer(new ApiError(409, 'EVENT_STARTED', 'Ancienne erreur'));
+    await flushPromises();
+
+    expect(wrapper.get('.fiche-sortie__titre').text()).toBe('Balade au Jardin des Plantes');
+    expect(wrapper.text()).not.toContain('Ancienne erreur');
+    expect(wrapper.text()).not.toContain('Vous êtes inscrit');
+    expect(sortiesApi.fetchEvent).toHaveBeenCalledTimes(3);
+  });
+
+  it('ignore une désinscription résolue après démontage de la fiche', async () => {
+    let terminer!: (result: Awaited<ReturnType<typeof sortiesApi.desinscrire>>) => void;
+    vi.mocked(sortiesApi.desinscrire).mockReturnValue(new Promise((resolve) => { terminer = resolve; }));
+    vi.mocked(sortiesApi.fetchEvent).mockResolvedValue(detail({ myRegistration: 'registered', canRegister: false }));
+    const wrapper = await monter(`/sorties/${ID}`);
+    await wrapper.get('.inscription-sortie button').trigger('click');
+    await wrapper.get('.confirmation .bouton:not(.bouton--secondaire)').trigger('click');
+    await router.push('/');
+    await flushPromises();
+    terminer({ status: 'withdrawn', availablePlaces: 4 });
+    await flushPromises();
+
+    expect(sortiesApi.fetchEvent).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('.fiche-sortie').exists()).toBe(false);
   });
 
   it('désinscription : confirmation nommant la sortie, puis place libérée et adresse masquée', async () => {

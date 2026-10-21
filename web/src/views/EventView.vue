@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ApiError } from '../api/http';
 import { desinscrire, fetchEvent, inscrire, type EventDetail } from '../api/sorties';
@@ -34,7 +34,12 @@ const boutonDesinscription = ref<HTMLButtonElement | null>(null);
 const retourListe = computed(() => ({ name: 'sorties', query: versQuery(lireFiltres(route.query)) }));
 // Une fiche demandée avant une autre (ou relue après une action) ne doit pas l'écraser.
 let derniereRequete = 0;
+let generationFiche = 0;
 const identifiant = () => String(route.params.eventId);
+type ContexteFiche = { id: string; generation: number };
+const contexte = (): ContexteFiche => ({ id: sortie.value!.id, generation: generationFiche });
+const estCourant = (operation: ContexteFiche): boolean =>
+  operation.generation === generationFiche && identifiant() === operation.id && sortie.value?.id === operation.id;
 
 const etatAffiche = computed(() => (sortie.value ? etatSortie(sortie.value) : null));
 const estInscrit = computed(() => sortie.value?.myRegistration === 'registered');
@@ -58,16 +63,20 @@ function gererRefusDAcces(e: unknown): boolean {
 }
 
 async function charger(): Promise<void> {
+  ++generationFiche;
+  const numero = ++derniereRequete;
+  const id = identifiant();
+  actionEnCours.value = null;
+  rechargementAdresse.value = null;
   if (!session.peutVoirSorties) {
     accesRefuse.value = session.estSuspendu ? 'suspendu' : 'bloque';
     return;
   }
-  const numero = ++derniereRequete;
   etat.value = 'chargement';
   retour.value = null;
   confirmationDemandee.value = false;
   try {
-    const reponse = await fetchEvent(identifiant());
+    const reponse = await fetchEvent(id);
     if (numero !== derniereRequete) return;
     sortie.value = reponse;
     etat.value = 'pret';
@@ -89,11 +98,12 @@ async function charger(): Promise<void> {
 // En cas d'échec, on garde ce qui est affiché (déjà corrigé avec la réponse de l'action).
 // Renvoie true seulement si la fiche affichée vient d'être relue : l'appelant ne doit jamais
 // annoncer une information (ex. l'adresse exacte) que la relecture n'a pas apportée.
-async function rafraichir(): Promise<boolean> {
+async function rafraichir(operation: ContexteFiche): Promise<boolean> {
+  if (!estCourant(operation)) return false;
   const numero = ++derniereRequete;
   try {
-    const reponse = await fetchEvent(identifiant());
-    if (numero !== derniereRequete) return false;
+    const reponse = await fetchEvent(operation.id);
+    if (numero !== derniereRequete || !estCourant(operation)) return false;
     sortie.value = reponse;
     return true;
   } catch {
@@ -108,19 +118,24 @@ const adresseManquante = computed(
 const rechargementAdresse = ref<'en-cours' | 'echec' | null>(null);
 
 async function rechargerAdresse(): Promise<void> {
+  if (!sortie.value) return;
+  const operation = contexte();
   rechargementAdresse.value = 'en-cours';
-  const relue = await rafraichir();
+  const relue = await rafraichir(operation);
+  if (!estCourant(operation)) return;
   rechargementAdresse.value = relue && sortie.value?.exactAddress ? null : 'echec';
 }
 
-async function annoncer(type: 'succes' | 'erreur', texte: string): Promise<void> {
+async function annoncer(operation: ContexteFiche, type: 'succes' | 'erreur', texte: string): Promise<void> {
+  if (!estCourant(operation)) return;
   retour.value = { type, texte };
   // Le bouton cliqué disparaît ou change : le focus va sur le message, qui est lu aussitôt.
   await nextTick();
-  zoneRetour.value?.focus();
+  if (estCourant(operation)) zoneRetour.value?.focus();
 }
 
-async function traiterEchec(e: unknown): Promise<void> {
+async function traiterEchec(e: unknown, operation: ContexteFiche): Promise<void> {
+  if (!estCourant(operation)) return;
   if (e instanceof ApiError && e.status === 404 && e.code === 'EVENT_NOT_FOUND') {
     etat.value = 'indisponible';
     return;
@@ -131,21 +146,24 @@ async function traiterEchec(e: unknown): Promise<void> {
     if (u) session.synchroniserProfil({ displayName: u.displayName, status: 'pending' });
   }
   // Complet, déjà commencé, déjà inscrit… : le message de l'API est fait pour être lu tel quel.
-  await rafraichir();
-  await annoncer('erreur', e instanceof ApiError ? e.message : 'Une erreur est survenue. Merci de réessayer.');
+  await rafraichir(operation);
+  await annoncer(operation, 'erreur', e instanceof ApiError ? e.message : 'Une erreur est survenue. Merci de réessayer.');
 }
 
 async function sInscrire(): Promise<void> {
   if (!sortie.value || actionEnCours.value) return;
+  const operation = contexte();
   const titre = sortie.value.title;
   actionEnCours.value = 'inscription';
   retour.value = null;
   try {
-    const resultat = await inscrire(sortie.value.id);
+    const resultat = await inscrire(operation.id);
+    if (!estCourant(operation)) return;
     sortie.value = { ...sortie.value, myRegistration: resultat.status, availablePlaces: resultat.availablePlaces, canRegister: false };
     rechargementAdresse.value = null;
-    const relue = await rafraichir();
+    const relue = await rafraichir(operation);
     await annoncer(
+      operation,
       'succes',
       relue && sortie.value?.exactAddress
         ? `Vous êtes inscrit à « ${titre} ». L'adresse exacte du rendez-vous est maintenant affichée.`
@@ -153,9 +171,9 @@ async function sInscrire(): Promise<void> {
             'utilisez le bouton « Afficher l’adresse exacte ».',
     );
   } catch (e) {
-    await traiterEchec(e);
+    await traiterEchec(e, operation);
   } finally {
-    actionEnCours.value = null;
+    if (estCourant(operation)) actionEnCours.value = null;
   }
 }
 
@@ -174,10 +192,12 @@ async function garderMaPlace(): Promise<void> {
 
 async function seDesinscrire(): Promise<void> {
   if (!sortie.value || actionEnCours.value) return;
+  const operation = contexte();
   const titre = sortie.value.title;
   actionEnCours.value = 'desinscription';
   try {
-    const resultat = await desinscrire(sortie.value.id);
+    const resultat = await desinscrire(operation.id);
+    if (!estCourant(operation)) return;
     sortie.value = {
       ...sortie.value,
       myRegistration: resultat.status,
@@ -185,17 +205,19 @@ async function seDesinscrire(): Promise<void> {
       exactAddress: sortie.value.isOrganizer ? sortie.value.exactAddress : null,
     };
     confirmationDemandee.value = false;
-    await rafraichir();
-    await annoncer('succes', `Vous n'êtes plus inscrit à « ${titre} ». Votre place est libérée pour un autre membre.`);
+    await rafraichir(operation);
+    await annoncer(operation, 'succes', `Vous n'êtes plus inscrit à « ${titre} ». Votre place est libérée pour un autre membre.`);
   } catch (e) {
+    if (!estCourant(operation)) return;
     confirmationDemandee.value = false;
-    await traiterEchec(e);
+    await traiterEchec(e, operation);
   } finally {
-    actionEnCours.value = null;
+    if (estCourant(operation)) actionEnCours.value = null;
   }
 }
 
 onMounted(charger);
+onBeforeUnmount(() => { ++generationFiche; ++derniereRequete; });
 watch(() => route.params.eventId, (id) => id && charger());
 </script>
 
