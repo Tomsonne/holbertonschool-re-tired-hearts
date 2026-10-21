@@ -216,7 +216,11 @@ export class ConversationsService {
       const message = await manager.save(manager.create(Message, {
         conversationId: id, senderId: actorId, body,
       }));
-      await manager.update(Conversation, { id }, { lastMessageAt: message.createdAt });
+      await manager.query(`
+        UPDATE conversations
+        SET last_message_at = GREATEST(COALESCE(last_message_at, $2::timestamptz), $2::timestamptz)
+        WHERE id = $1
+      `, [id, message.createdAt]);
       return {
         id: message.id,
         body: message.body,
