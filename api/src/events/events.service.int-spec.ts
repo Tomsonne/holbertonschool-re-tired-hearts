@@ -116,6 +116,10 @@ describe('EventsService (PostgreSQL)', () => {
     await expect(service.publish(otherOrganizerId, event.id)).rejects.toMatchObject({
       response: { code: 'NOT_EVENT_OWNER' },
     });
+    await expect(service.update(memberId, event.id, { title: 'Titre interdit' })).rejects.toMatchObject({
+      status: 403, response: { code: 'ROLE_REQUIRED' },
+    });
+    expect((await db.manager.findOneByOrFail(Event, { id: event.id })).title).toBe(input().title);
   });
 
   it('publie, puis annule avec un audit quand le modérateur agit', async () => {
