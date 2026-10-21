@@ -1,8 +1,9 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { CurrentUser, RequireAccess } from '../auth/auth.decorators';
 import { User } from '../users/user.entity';
 import { CreateConversationDto } from './create-conversation.dto';
+import { ConversationParticipantGuard } from './conversation-participant.guard';
 import { ConversationsService } from './conversations.service';
 import { MessageQueryDto, SendMessageDto } from './message.dto';
 
@@ -47,6 +48,7 @@ export class ConversationsController {
 
   @Post(':id/messages')
   @RequireAccess('active')
+  @UseGuards(ConversationParticipantGuard)
   send(
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,

@@ -11,6 +11,8 @@ export class ConversationsService {
   constructor(private readonly db: DataSource) {}
 
   async start(actorId: string, recipientId: string, eventId?: string): Promise<{ conversation: object; created: boolean }> {
+    actorId = actorId.toLowerCase();
+    recipientId = recipientId.toLowerCase();
     if (actorId === recipientId) {
       throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Vous ne pouvez pas vous écrire à vous-même.');
     }
@@ -109,6 +111,10 @@ export class ConversationsService {
     return conversation;
   }
 
+  async assertParticipant(actorId: string, id: string): Promise<void> {
+    await this.requireParticipant(this.db.manager, actorId, id);
+  }
+
   async detail(actorId: string, id: string): Promise<object> {
     const conversation = await this.requireParticipant(this.db.manager, actorId, id);
     const otherId = conversation.participantAId === actorId ? conversation.participantBId : conversation.participantAId;
@@ -188,13 +194,13 @@ export class ConversationsService {
   }
 
   async send(actorId: string, id: string, rawBody: string): Promise<object> {
-    // La base répète la limite ; ce nettoyage précède la mesure et le stockage.
-    const body = typeof rawBody === 'string' ? rawBody.replace(/\s+/gu, ' ').trim() : '';
-    if (Array.from(body).length < 1 || Array.from(body).length > MESSAGE_MAX_LENGTH) {
-      throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Le message doit contenir de 1 à 1000 caractères.');
-    }
     return this.db.transaction(async (manager) => {
       const conversation = await this.requireParticipant(manager, actorId, id);
+      // La base répète la limite ; ce nettoyage précède la mesure et le stockage.
+      const body = typeof rawBody === 'string' ? rawBody.replace(/\s+/gu, ' ').trim() : '';
+      if (Array.from(body).length < 1 || Array.from(body).length > MESSAGE_MAX_LENGTH) {
+        throw new AppException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Le message doit contenir de 1 à 1000 caractères.');
+      }
       const otherId = conversation.participantAId === actorId ? conversation.participantBId : conversation.participantAId;
       const actor = await manager.findOneBy(User, { id: actorId });
       const actorProfile = await manager.findOneBy(Profile, { userId: actorId });
