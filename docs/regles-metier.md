@@ -106,8 +106,9 @@ Deux statuts indépendants : `users.status` (`active` par défaut, ou `suspended
 - **R-LOC-2** Les membres voient uniquement « Ville (département) ». Le filtrage utilise le
   département ou le code de la commune.
 - **R-LOC-3** La ville est choisie via la recherche de communes (API externe, tâche 5). Si le service
-  est lent (> 3 s) ou indisponible, le formulaire bascule en **saisie manuelle** (ville + code postal
-  validés par leur format) et la localisation est enregistrée avec `location_verified = false`.
+  est lent (> 3 s) ou indisponible, le formulaire bascule en **saisie manuelle** (ville et département,
+  code postal facultatif ; chacun validé par son format) et la localisation est enregistrée avec
+  `location_verified = false`.
 - **R-LOC-4** Un événement a un **repère approximatif** public (ex. « près du parc de la Tête d'Or »)
   et une **adresse exacte** privée. L'adresse exacte n'est renvoyée qu'à l'organisateur, aux membres
   inscrits (`registered`) et aux modérateurs.

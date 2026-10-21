@@ -29,10 +29,12 @@ export class LocationInputDto {
   @Length(1, 100)
   cityName: string;
 
-  @ApiProperty({ example: '69100' })
+  // Facultatif (règles métier §3) : vérifié seulement s'il est fourni.
+  @ApiPropertyOptional({ nullable: true, example: '69100' })
+  @IsOptional()
   @IsString()
   @Matches(/^[0-9]{5}$/)
-  postalCode: string;
+  postalCode?: string | null;
 
   @ApiProperty({ example: '69' })
   @IsString()

@@ -71,6 +71,18 @@ describe('Issue #5 — consultation et édition de son propre profil', () => {
       expect(error).toBeInstanceOf(AppException);
     });
 
+    it('accepte une localisation sans code postal (absent ou null), mais pas une chaîne vide', async () => {
+      const { postalCode: _absent, ...sansCodePostal } = validInput.location;
+      await expect(pipe.transform({ ...validInput, location: sansCodePostal }, metadata)).resolves.toBeDefined();
+      await expect(
+        pipe.transform({ ...validInput, location: { ...validInput.location, postalCode: null } }, metadata),
+      ).resolves.toBeDefined();
+      const vide = await pipe
+        .transform({ ...validInput, location: { ...validInput.location, postalCode: '' } }, metadata)
+        .catch((e) => e);
+      expect(vide).toBeInstanceOf(AppException);
+    });
+
     it('accepte une entrée valide et une localisation nulle', async () => {
       await expect(pipe.transform(validInput, metadata)).resolves.toBeInstanceOf(ProfileInputDto);
       await expect(pipe.transform({ ...validInput, location: null, bio: null }, metadata)).resolves.toBeDefined();

@@ -23,7 +23,7 @@ const erreurGenerale = ref<string | null>(null);
 const resumeErreurs = ref<HTMLElement | null>(null);
 const messageSucces = ref<HTMLElement | null>(null);
 
-// L'ordre des clés est l'ordre des champs à l'écran : le résumé les liste dans le même ordre.
+
 const LIBELLES: Record<Champ, string> = {
   email: 'Adresse e-mail',
   nomAffiche: 'Nom affiché',
@@ -34,7 +34,7 @@ const IDS: Record<Champ, string> = {
   nomAffiche: 'inscription-nom',
   motDePasse: 'inscription-mot-de-passe',
 };
-// Nom des champs côté API (details[].field) → nos champs.
+
 const CHAMPS_API: Record<string, Champ> = { email: 'email', displayName: 'nomAffiche', password: 'motDePasse' };
 
 const lienConnexion = computed(() => ({
@@ -55,7 +55,7 @@ function viderErreurs(): void {
   emailDejaUtilise.value = false;
 }
 
-// Mêmes limites que l'API (RegisterDto, R-AUTH-1, profil §3). L'API revalide tout.
+
 function valider(): void {
   const adresse = email.value.trim();
   if (!adresse) erreursChamps.email = 'Saisissez votre adresse e-mail.';
@@ -74,7 +74,7 @@ function valider(): void {
     erreursChamps.motDePasse = 'Le mot de passe ne doit pas dépasser 128 caractères.';
 }
 
-// Les refus de l'API sont rangés sous le bon champ quand c'est possible.
+
 function traiterErreur(erreur: unknown): void {
   if (!(erreur instanceof ApiError)) {
     erreurGenerale.value = 'Une erreur est survenue. Merci de réessayer.';
@@ -86,7 +86,7 @@ function traiterErreur(erreur: unknown): void {
       emailDejaUtilise.value = true;
       return;
     case 'VALIDATION_FAILED': {
-      // Les messages détaillés de l'API sont techniques (en anglais) : on garde seulement le champ.
+
       const champs = erreur.details.map((d) => CHAMPS_API[d.field]).filter(Boolean);
       champs.forEach((champ) => (erreursChamps[champ] = `Vérifiez ce champ : ${LIBELLES[champ].toLowerCase()} invalide.`));
       if (champs.length === 0) erreurGenerale.value = erreur.message;
@@ -116,7 +116,7 @@ async function creerCompte(): Promise<void> {
   if (!aDesErreurs.value) {
     envoiEnCours.value = true;
     try {
-      // Seulement ces trois champs : jamais de rôle ni de statut (R-ROLE-1, R-STATUS-3).
+
       await session.inscription({
         email: email.value.trim(),
         displayName: nomAffiche.value.trim(),
@@ -136,15 +136,16 @@ async function creerCompte(): Promise<void> {
   resumeErreurs.value?.focus();
 }
 
+// Prochaine étape annoncée dans le message : compléter son profil (R-PROF-1, R-PROF-2).
 function continuer(): void {
-  void router.push({ name: 'accueil' });
+  void router.push({ name: 'mon-profil' });
 }
 </script>
 
 <template>
   <h2>Créer un compte</h2>
 
-  <!-- Succès : le compte existe, le profil est « en attente » (R-PROF-1). -->
+
   <section
     v-if="compteCree"
     ref="messageSucces"
@@ -159,7 +160,7 @@ function continuer(): void {
       le vérifiera ; une fois approuvé, vous pourrez découvrir les autres membres et vous inscrire aux
       sorties.
     </p>
-    <button type="button" class="bouton" @click="continuer">Continuer</button>
+    <button type="button" class="bouton" @click="continuer">Compléter mon profil</button>
   </section>
 
   <template v-else>

@@ -99,8 +99,8 @@ type Me = {
 
 | Route | Accès | Corps | Réponse | Erreurs |
 |---|---|---|---|---|
-| `GET /api/me/profile` | actif | — | `200 OwnProfile` | `401` |
-| `PUT /api/me/profile` | actif, profil non bloqué | `ProfileInput` | `200 OwnProfile` | `400` (dont `location: null` sur un profil approuvé), `403 PROFILE_BLOCKED` |
+| `GET /api/me/profile` | actif | — | `200 OwnProfile` (y compris profil `blocked`, en lecture seule) | `401 UNAUTHENTICATED`, `401 SESSION_EXPIRED`, `403 ACCOUNT_SUSPENDED` |
+| `PUT /api/me/profile` | actif, profil non bloqué | `ProfileInput` | `200 OwnProfile` (le statut n'est jamais modifié) | `400 VALIDATION_FAILED` (champ inconnu, `location: null` sur un profil approuvé, centre d'intérêt inconnu), `401`, `403 ACCOUNT_SUSPENDED`, `403 PROFILE_BLOCKED` |
 | `GET /api/profiles?interestId=&departmentCode=&page=` | approuvé | — | `200 Page<PublicProfile>` | `403 PROFILE_NOT_APPROVED` |
 | `GET /api/profiles/:userId` | approuvé | — | `200 PublicProfile` | `404 PROFILE_UNAVAILABLE` (même réponse pour en attente, bloqué, masqué, suspendu, inconnu) |
 
@@ -110,7 +110,10 @@ type ProfileInput = {            // ni role, ni status, ni email : champ inconnu
   bio?: string | null;           // 500 max
   lookingFor: ('friendship' | 'companionship' | 'romance' | 'activities')[];
   interestIds: number[];         // 0–10 (≥ 1 requis pour l'approbation)
-  location?: { cityName: string; postalCode: string; departmentCode: string; cityCode?: string | null; verified: boolean } | null;
+  // Si la localisation est envoyée, cityName et departmentCode sont obligatoires (departmentCode : 2 chiffres,
+  // 2A, 2B ou 971–976). postalCode est facultatif (§3) : 5 chiffres s'il est fourni, sinon null ou absent.
+  // Saisie manuelle : cityCode null, verified false (R-LOC-3).
+  location?: { cityName: string; postalCode?: string | null; departmentCode: string; cityCode?: string | null; verified: boolean } | null;
   discoverable: boolean;
   allowMessages: boolean;
 };
@@ -121,7 +124,8 @@ type PublicProfile = {           // ce que voient les autres membres
 };
 type OwnProfile = Omit<PublicProfile, 'location'> & {
   location: PrivateLocation | null; discoverable: boolean; allowMessages: boolean;
-  status: 'pending' | 'approved' | 'blocked'; isComplete: boolean; missingForApproval: string[];
+  status: 'pending' | 'approved' | 'blocked'; isComplete: boolean;
+  missingForApproval: ('displayName' | 'location' | 'interests')[];   // vide quand isComplete (R-PROF-2)
 };
 ```
 

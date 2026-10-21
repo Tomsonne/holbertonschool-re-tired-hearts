@@ -83,6 +83,14 @@ export const useSessionStore = defineStore('session', {
       this.oublierSession();
     },
 
+    // Après GET ou PUT /me/profile : l'en-tête et les gardes utilisent le nom et le statut à jour
+    // (ex. profil approuvé ou bloqué par un modérateur depuis la connexion).
+    synchroniserProfil(profil: { displayName: string; status: Me['profileStatus'] }): void {
+      if (!this.utilisateur) return;
+      this.utilisateur.displayName = profil.displayName;
+      this.utilisateur.profileStatus = profil.status;
+    },
+
     // Utilisé quand l'API répond 401 SESSION_EXPIRED en cours de navigation (R-AUTH-6).
     oublierSession(): void {
       this.utilisateur = null;
