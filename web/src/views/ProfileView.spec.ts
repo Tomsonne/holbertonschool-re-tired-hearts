@@ -132,7 +132,7 @@ describe('écran « Mon profil »', () => {
       const bandeau = wrapper.get('.bandeau-profil');
       expect(bandeau.get('h3').text()).toBe('Profil en attente de vérification');
       expect(bandeau.findAll('li').map((li) => li.text())).toEqual([
-        'votre ville, son code postal et son département',
+        'votre ville et son département',
         "au moins un centre d'intérêt",
       ]);
 
@@ -279,6 +279,45 @@ describe('écran « Mon profil »', () => {
       expect(wrapper.get('#profil-code-postal').attributes('aria-invalid')).toBe('true');
       expect(document.activeElement).toBe(wrapper.get('.resume-erreurs').element);
       expect(wrapper.text()).not.toContain('must match');
+    });
+
+    it('code postal facultatif : un profil approuvé sans code postal enregistre ses autres modifications', async () => {
+      // Comme les comptes de démonstration du seed : approuvés, ville et département, sans code postal.
+      const demo = profilApprouve({
+        location: { cityName: 'Lyon', departmentCode: '69', postalCode: null, cityCode: null, verified: false },
+      });
+      vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(demo);
+      vi.mocked(profilApi.updateMyProfile).mockResolvedValue(demo);
+      const wrapper = await monter();
+
+      expect(wrapper.get('label[for="profil-code-postal"]').text()).toBe('Code postal (facultatif)');
+      await wrapper.get('input[name="interestIds"][value="1"]').setValue(true);
+      await envoyer(wrapper);
+
+      expect(wrapper.find('.resume-erreurs').exists()).toBe(false);
+      expect(vi.mocked(profilApi.updateMyProfile).mock.calls[0][0]).toMatchObject({
+        interestIds: [2, 1],
+        location: { cityName: 'Lyon', departmentCode: '69', postalCode: null, cityCode: null, verified: false },
+      });
+      expect(wrapper.get('.message--succes[role="status"]').text()).toBe('Vos modifications sont enregistrées.');
+    });
+
+    it('code postal facultatif : une nouvelle ville sans code postal est envoyée avec postalCode null', async () => {
+      vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+      vi.mocked(profilApi.updateMyProfile).mockResolvedValue(profilVide());
+      const wrapper = await monter();
+
+      await wrapper.get('#profil-ville').setValue('Albi');
+      await wrapper.get('#profil-departement').setValue('81');
+      await envoyer(wrapper);
+
+      expect(vi.mocked(profilApi.updateMyProfile).mock.calls[0][0].location).toEqual({
+        cityName: 'Albi',
+        postalCode: null,
+        departmentCode: '81',
+        cityCode: null,
+        verified: false,
+      });
     });
 
     it("refuse de retirer la ville d'un profil approuvé, sans appeler l'API (R-PROF-5)", async () => {

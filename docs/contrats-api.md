@@ -110,9 +110,10 @@ type ProfileInput = {            // ni role, ni status, ni email : champ inconnu
   bio?: string | null;           // 500 max
   lookingFor: ('friendship' | 'companionship' | 'romance' | 'activities')[];
   interestIds: number[];         // 0–10 (≥ 1 requis pour l'approbation)
-  // Si la localisation est envoyée, les trois premiers champs sont obligatoires (postalCode : 5 chiffres,
-  // departmentCode : 2 chiffres, 2A, 2B ou 971–976). Saisie manuelle : cityCode null, verified false (R-LOC-3).
-  location?: { cityName: string; postalCode: string; departmentCode: string; cityCode?: string | null; verified: boolean } | null;
+  // Si la localisation est envoyée, cityName et departmentCode sont obligatoires (departmentCode : 2 chiffres,
+  // 2A, 2B ou 971–976). postalCode est facultatif (§3) : 5 chiffres s'il est fourni, sinon null ou absent.
+  // Saisie manuelle : cityCode null, verified false (R-LOC-3).
+  location?: { cityName: string; postalCode?: string | null; departmentCode: string; cityCode?: string | null; verified: boolean } | null;
   discoverable: boolean;
   allowMessages: boolean;
 };

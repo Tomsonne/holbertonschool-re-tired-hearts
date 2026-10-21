@@ -41,7 +41,7 @@ export type ProfileInput = {
   interestIds: number[];
   location: {
     cityName: string;
-    postalCode: string;
+    postalCode: string | null; // facultatif (règles métier §3)
     departmentCode: string;
     cityCode: string | null;
     verified: boolean;

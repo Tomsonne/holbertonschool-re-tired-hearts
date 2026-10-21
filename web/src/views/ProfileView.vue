@@ -88,7 +88,7 @@ const RECHERCHES: { valeur: Recherche; libelle: string }[] = [
 // Ce qui manque pour l'approbation, avec le champ où le corriger.
 const MANQUES: Record<ManquePourApprobation, { texte: string; champ: Champ }> = {
   displayName: { texte: 'votre nom affiché', champ: 'nomAffiche' },
-  location: { texte: 'votre ville, son code postal et son département', champ: 'ville' },
+  location: { texte: 'votre ville et son département', champ: 'ville' },
   interests: { texte: "au moins un centre d'intérêt", champ: 'interets' },
 };
 
@@ -189,8 +189,9 @@ function valider(): void {
   }
   if (!ville) erreursChamps.ville = 'Indiquez le nom de votre ville.';
   else if (ville.length > 100) erreursChamps.ville = 'Le nom de la ville ne doit pas dépasser 100 caractères.';
-  if (!/^[0-9]{5}$/.test(codePostal))
-    erreursChamps.codePostal = 'Saisissez les 5 chiffres du code postal, par exemple 31000.';
+  // Code postal facultatif (règles métier §3) : vérifié seulement s'il est saisi.
+  if (codePostal && !/^[0-9]{5}$/.test(codePostal))
+    erreursChamps.codePostal = 'Saisissez les 5 chiffres du code postal, par exemple 31000, ou laissez le champ vide.';
   if (!/^(?:[0-9]{2}|2[AB]|97[1-6])$/.test(departement))
     erreursChamps.departement = 'Saisissez le numéro du département, par exemple 31, 2A ou 974.';
 }
@@ -205,7 +206,7 @@ function construireRequete(): ProfileInput {
   const inchangee =
     avant !== null &&
     avant.cityName === ville &&
-    avant.postalCode === codePostal &&
+    avant.postalCode === (codePostal || null) &&
     avant.departmentCode === departement;
   const presentation = form.presentation.trim();
 
@@ -217,7 +218,7 @@ function construireRequete(): ProfileInput {
     location: ville
       ? {
           cityName: ville,
-          postalCode: codePostal,
+          postalCode: codePostal || null,
           departmentCode: departement,
           cityCode: inchangee ? avant.cityCode : null,
           verified: inchangee ? avant.verified : false,
@@ -554,7 +555,7 @@ const membreDepuis = computed(() =>
 
             <div class="ligne-champs">
               <div class="champ">
-                <label :for="IDS.codePostal">{{ LIBELLES.codePostal }}</label>
+                <label :for="IDS.codePostal">{{ LIBELLES.codePostal }} (facultatif)</label>
                 <p id="profil-code-postal-aide" class="champ__aide">Privé : il n'est jamais montré aux membres.</p>
                 <input
                   :id="IDS.codePostal"
