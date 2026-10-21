@@ -13,9 +13,11 @@ import ProfileView from './ProfileView.vue';
 vi.mock('../api/auth', () => ({ fetchMe: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() }));
 vi.mock('../api/interests', () => ({ fetchInterests: vi.fn() }));
 vi.mock('../api/profil', () => ({ fetchMyProfile: vi.fn(), updateMyProfile: vi.fn() }));
+vi.mock('../api/cities', () => ({ searchCities: vi.fn() }));
 const authApi = await import('../api/auth');
 const interestsApi = await import('../api/interests');
 const profilApi = await import('../api/profil');
+const citiesApi = await import('../api/cities');
 
 const membre: Me = {
   id: '33333333-3333-3333-3333-333333333333',
@@ -380,6 +382,56 @@ describe('écran « Mon profil »', () => {
       await cases()[10].setValue(true);
       expect(wrapper.text()).toContain('10 sur 10 choisis.');
     });
+  });
+
+  it('sélectionne une commune vérifiée et conserve son code INSEE', async () => {
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockResolvedValue([
+      { cityName: 'Lyon', postalCodes: ['69001'], departmentCode: '69', cityCode: '69123' },
+    ]);
+    vi.mocked(profilApi.updateMyProfile).mockResolvedValue(profilVide());
+    const wrapper = await monter();
+    await wrapper.get('#profil-ville').setValue('Lyo');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await flushPromises();
+    await wrapper.get('[aria-label="Communes proposées"] button').trigger('click');
+    await envoyer(wrapper);
+    expect(profilApi.updateMyProfile).toHaveBeenCalledWith(expect.objectContaining({
+      location: { cityName: 'Lyon', departmentCode: '69', postalCode: '69001', cityCode: '69123', verified: true },
+    }));
+  });
+
+  it('permet la saisie manuelle après une panne de recherche', async () => {
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockRejectedValue(new Error('offline'));
+    vi.mocked(profilApi.updateMyProfile).mockResolvedValue(profilVide());
+    const wrapper = await monter();
+    await wrapper.get('#profil-ville').setValue('Lyo');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await flushPromises();
+    expect(wrapper.text()).toContain('saisissez la ville et le département');
+    await wrapper.get('#profil-ville').setValue('Lyon');
+    await wrapper.get('#profil-departement').setValue('69');
+    await envoyer(wrapper);
+    expect(profilApi.updateMyProfile).toHaveBeenCalledWith(expect.objectContaining({
+      location: { cityName: 'Lyon', departmentCode: '69', postalCode: null, cityCode: null, verified: false },
+    }));
+  });
+
+  it('laisse saisir la ville si la recherche ne trouve aucun résultat', async () => {
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockResolvedValue([]);
+    vi.mocked(profilApi.updateMyProfile).mockResolvedValue(profilVide());
+    const wrapper = await monter();
+    await wrapper.get('#profil-ville').setValue('Village fictif');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await flushPromises();
+    expect(wrapper.text()).toContain('saisissez la ville et le département');
+    await wrapper.get('#profil-departement').setValue('69');
+    await envoyer(wrapper);
+    expect(profilApi.updateMyProfile).toHaveBeenCalledWith(expect.objectContaining({
+      location: { cityName: 'Village fictif', departmentCode: '69', postalCode: null, cityCode: null, verified: false },
+    }));
   });
 
   it('un visiteur non connecté est envoyé vers la connexion, puis reviendra ici', async () => {
