@@ -12,6 +12,7 @@ import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { Conversation } from './conversation.entity';
 import { ConversationsService } from './conversations.service';
+import { Message } from './message.entity';
 
 describe('ConversationsService (PostgreSQL)', () => {
   let db: DataSource;
@@ -184,5 +185,96 @@ describe('ConversationsService (PostgreSQL)', () => {
     expect(await db.manager.countBy(Conversation, {
       participantAId: [a, b].sort()[0], participantBId: [a, b].sort()[1],
     })).toBe(0);
+  });
+
+  it('nettoie le texte, attribue l’expéditeur à la session et refuse les bornes invalides', async () => {
+    const organizer = await user(UserRole.Organizer);
+    const a = await user();
+    const b = await user();
+    const eventId = await event(organizer);
+    await registrations.register(a, eventId);
+    await registrations.register(b, eventId);
+    const { conversation } = await conversations.start(a, b);
+    const id = (conversation as Conversation).id;
+    const sent = await conversations.send(a, id, '  Bonjour \n   à tous  ') as Message;
+    expect(sent).toMatchObject({ body: 'Bonjour à tous', sentByMe: true });
+    expect(await db.manager.findOneByOrFail(Message, { id: sent.id })).toMatchObject({
+      senderId: a, body: 'Bonjour à tous',
+    });
+    for (const body of ['', '  \t\n  ', 'x'.repeat(1001)]) {
+      await expect(conversations.send(a, id, body)).rejects.toMatchObject({
+        status: 400, response: { code: 'VALIDATION_FAILED' },
+      });
+    }
+    expect(await db.manager.countBy(Message, { conversationId: id })).toBe(1);
+  });
+
+  it('pagine les messages du plus ancien au plus récent avec un curseur stable', async () => {
+    const organizer = await user(UserRole.Organizer);
+    const a = await user();
+    const b = await user();
+    const eventId = await event(organizer);
+    await registrations.register(a, eventId);
+    await registrations.register(b, eventId);
+    const { conversation } = await conversations.start(a, b);
+    const id = (conversation as Conversation).id;
+    const first = await conversations.send(a, id, 'Premier') as Message;
+    const second = await conversations.send(b, id, 'Deuxième') as Message;
+    const third = await conversations.send(a, id, 'Troisième') as Message;
+    const latest = await conversations.messages(a, id, undefined, 2);
+    expect(latest.map((message) => (message as Message).id)).toEqual([second.id, third.id]);
+    expect(latest[0]).toMatchObject({ sentByMe: false, body: 'Deuxième' });
+    const older = await conversations.messages(a, id, second.id, 2);
+    expect(older.map((message) => (message as Message).id)).toEqual([first.id]);
+    expect(await conversations.list(a)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id, lastMessage: expect.objectContaining({ body: 'Troisième', sentByMe: true }) }),
+    ]));
+  });
+
+  it('refuse lecture et écriture aux tiers, modérateur compris, sans exposer le contenu', async () => {
+    const organizer = await user(UserRole.Organizer);
+    const a = await user();
+    const b = await user();
+    const outsider = await user();
+    const moderator = await user(UserRole.Moderator);
+    const eventId = await event(organizer);
+    await registrations.register(a, eventId);
+    await registrations.register(b, eventId);
+    const { conversation } = await conversations.start(a, b);
+    const id = (conversation as Conversation).id;
+    await conversations.send(a, id, 'Contenu strictement privé');
+    for (const stranger of [outsider, moderator]) {
+      for (const request of [
+        conversations.detail(stranger, id),
+        conversations.messages(stranger, id),
+        conversations.send(stranger, id, 'Tentative'),
+      ]) {
+        await expect(request).rejects.toMatchObject({
+          status: 404, response: { code: 'CONVERSATION_NOT_FOUND' },
+        });
+      }
+    }
+    expect(await db.manager.countBy(Message, { conversationId: id })).toBe(1);
+  });
+
+  it('continue après désinscription et fin de sortie, puis bloque un destinataire indisponible', async () => {
+    const organizer = await user(UserRole.Organizer);
+    const a = await user();
+    const b = await user();
+    const eventId = await event(organizer);
+    await registrations.register(a, eventId);
+    await registrations.register(b, eventId);
+    const { conversation } = await conversations.start(a, b);
+    const id = (conversation as Conversation).id;
+    await registrations.withdraw(b, eventId);
+    await db.manager.update(Event, { id: eventId }, {
+      startsAt: new Date(Date.now() - 7200000), endsAt: new Date(Date.now() - 3600000),
+    });
+    expect(await conversations.send(a, id, 'Encore possible')).toMatchObject({ body: 'Encore possible' });
+    await db.manager.update(Profile, { userId: b }, { allowMessages: false });
+    await expect(conversations.send(a, id, 'Refus')).rejects.toMatchObject({
+      status: 409, response: { code: 'MESSAGING_DISABLED' },
+    });
+    expect((await conversations.messages(a, id)).map((message) => (message as Message).body)).toEqual(['Encore possible']);
   });
 });
