@@ -186,7 +186,9 @@ function choisirCommune(commune: CityResult): void {
 }
 
 function saisirLocalisation(): void {
-  communeChoisie.value = null;
+  // La commune choisie n'est pas annulée ici : selectionValide revalide ville, département et
+  // code postal à l'enregistrement. Un autre code postal de la même commune — Toulouse en a six —
+  // garde donc son code INSEE, et un code étranger reste refusé par ce même garde.
   localisationModifiee.value = true;
 }
 

@@ -421,6 +421,44 @@ describe('écran « Mon profil »', () => {
     }));
   });
 
+  it('garde le code INSEE quand le code postal change au sein de la commune', async () => {
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockResolvedValue([
+      { cityName: 'Toulouse', postalCodes: ['31000', '31400', '31500'], departmentCode: '31', cityCode: '31555' },
+    ]);
+    vi.mocked(profilApi.updateMyProfile).mockResolvedValue(profilVide());
+    const wrapper = await monter();
+    await wrapper.get('#profil-ville').setValue('Toulou');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await flushPromises();
+    await wrapper.get('[aria-label="Communes proposées"] button').trigger('click');
+    // Le premier code postal de la commune est pré-rempli : en choisir un autre de la même
+    // commune ne doit dégrader ni le code INSEE ni la vérification.
+    await wrapper.get('#profil-code-postal').setValue('31400');
+    await envoyer(wrapper);
+    expect(profilApi.updateMyProfile).toHaveBeenCalledWith(expect.objectContaining({
+      location: { cityName: 'Toulouse', departmentCode: '31', postalCode: '31400', cityCode: '31555', verified: true },
+    }));
+  });
+
+  it('perd le code INSEE si le code postal est étranger à la commune', async () => {
+    vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
+    vi.mocked(citiesApi.searchCities).mockResolvedValue([
+      { cityName: 'Toulouse', postalCodes: ['31000', '31400', '31500'], departmentCode: '31', cityCode: '31555' },
+    ]);
+    vi.mocked(profilApi.updateMyProfile).mockResolvedValue(profilVide());
+    const wrapper = await monter();
+    await wrapper.get('#profil-ville').setValue('Toulou');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await flushPromises();
+    await wrapper.get('[aria-label="Communes proposées"] button').trigger('click');
+    await wrapper.get('#profil-code-postal').setValue('75001');
+    await envoyer(wrapper);
+    expect(profilApi.updateMyProfile).toHaveBeenCalledWith(expect.objectContaining({
+      location: { cityName: 'Toulouse', departmentCode: '31', postalCode: '75001', cityCode: null, verified: false },
+    }));
+  });
+
   it('permet la saisie manuelle après une panne de recherche', async () => {
     vi.mocked(profilApi.fetchMyProfile).mockResolvedValue(profilVide());
     vi.mocked(citiesApi.searchCities).mockRejectedValue(new Error('offline'));
