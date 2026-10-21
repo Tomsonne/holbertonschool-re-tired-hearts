@@ -16,7 +16,7 @@
     "migration:run:prod": "typeorm -d dist/database/data-source.js migration:run",
     "seed": "ts-node src/database/seed.ts",
     "seed:prod": "node dist/database/seed.js",
-    "db:reset": "npm run typeorm -- schema:drop && npm run migration:run",
+    "db:reset": "ts-node src/database/reset-demo.ts",
     "test": "jest",
     "test:issues": "jest --config test/jest-issues.config.json --runInBand",
     "test:integration": "jest --runInBand --testRegex='.*\\.int-spec\\.ts$'",
