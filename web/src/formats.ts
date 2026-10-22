@@ -104,12 +104,18 @@ export const RAISONS_ENVOI_IMPOSSIBLE: Record<string, string> = {
 const formatJourCourt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: FUSEAU });
 
 // « Aujourd'hui à 14 h 30 », « Hier à 9 h », « 12 octobre 2026 à 18 h 05 » (heure de Paris).
+// On compare des jours du calendrier à Paris, jamais des durées : aux changements d'heure, deux
+// jours consécutifs sont séparés de 23 ou 25 heures, et « maintenant − 24 h » tomberait à côté.
 export function formaterMoment(iso: string, maintenant = new Date()): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  const jour = (d: Date) => formatJourCourt.format(d);
-  const hier = new Date(maintenant.getTime() - 24 * 3600 * 1000);
-  const quand = jour(date) === jour(maintenant) ? "Aujourd'hui" : jour(date) === jour(hier) ? 'Hier' : jour(date);
+  const jourMessage = partiesParis(iso)?.date;
+  const aujourdhui = partiesParis(maintenant.toISOString())?.date;
+  if (!jourMessage || !aujourdhui) return '';
+  // Veille calendaire de « aujourd'hui » : Date.UTC gère seul les fins de mois et d'année.
+  const [a, m, j] = aujourdhui.split('-').map(Number);
+  const hier = new Date(Date.UTC(a, m - 1, j - 1)).toISOString().slice(0, 10);
+  const quand =
+    jourMessage === aujourdhui ? "Aujourd'hui" : jourMessage === hier ? 'Hier' : formatJourCourt.format(date);
   return `${quand} à ${heure(date)}`;
 }
 

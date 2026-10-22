@@ -93,4 +93,15 @@ describe('messagerie', () => {
     expect(lisible(formaterMoment('2026-10-12T16:05:00.000Z', maintenant))).toBe('12 octobre 2026 à 18 h 05');
     expect(formaterMoment('pas une date', maintenant)).toBe('');
   });
+
+  it("reconnaît « hier » autour des changements d'heure (jours de 23 et 25 heures)", () => {
+    // 25 octobre 2026 à 23 h 30 à Paris (journée de 25 h) : un message du 24 à 23 h 50 date d'hier.
+    const finOctobre = new Date('2026-10-25T22:30:00.000Z');
+    expect(lisible(formaterMoment('2026-10-24T21:50:00.000Z', finOctobre))).toBe('Hier à 23 h 50');
+    // 30 mars 2026 à 0 h 30 (après la journée de 23 h du 29) : un message du 29 à 0 h 10 date d'hier.
+    const finMars = new Date('2026-03-29T22:30:00.000Z');
+    expect(lisible(formaterMoment('2026-03-28T23:10:00.000Z', finMars))).toBe('Hier à 0 h 10');
+    // Changement de mois et d'année.
+    expect(lisible(formaterMoment('2026-12-31T20:00:00.000Z', new Date('2027-01-01T09:00:00.000Z')))).toBe('Hier à 21 h');
+  });
 });
