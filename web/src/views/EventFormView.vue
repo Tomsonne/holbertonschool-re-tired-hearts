@@ -303,19 +303,20 @@ function traiterErreur(e: unknown): void {
     erreurGenerale.value = 'Une erreur est survenue. Merci de réessayer.';
     return;
   }
-  if (e.code === 'VALIDATION_FAILED' && e.details.length) {
-    // Les messages détaillés de l'API sont techniques : on garde seulement le champ concerné.
-    const champs = [...new Set(e.details.map((d) => CHAMPS_API[d.field]).filter(Boolean))];
-    champs.forEach((c) => (erreursChamps[c] = `Vérifiez ce champ : ${LIBELLES[c].toLowerCase()} invalide.`));
-    if (champs.length === 0) erreurGenerale.value = e.message;
-    return;
-  }
-  if (e.code === 'CAPACITY_BELOW_REGISTRATIONS') {
-    erreursChamps.capacite = e.message;
-    return;
-  }
-  // EVENT_HAS_REGISTRATIONS, EVENT_NOT_EDITABLE, EVENT_IN_PAST, ROLE_REQUIRED… : tel quel.
+  // Critère de la mission : les erreurs de l'API sont affichées telles quelles. Son message
+  // général va en tête du résumé ; chaque détail reconnu est placé, mot pour mot, sous son champ.
   erreurGenerale.value = e.message;
+  if (e.code === 'VALIDATION_FAILED' && e.details.length) {
+    for (const detail of e.details) {
+      const champ = CHAMPS_API[detail.field];
+      if (!champ) continue;
+      erreursChamps[champ] = [erreursChamps[champ], ...detail.messages].filter(Boolean).join(' ');
+    }
+    return;
+  }
+  // Le refus concerne le nombre de places : il est aussi rappelé sous ce champ.
+  if (e.code === 'CAPACITY_BELOW_REGISTRATIONS') erreursChamps.capacite = e.message;
+  // EVENT_HAS_REGISTRATIONS, EVENT_NOT_EDITABLE, EVENT_IN_PAST, ROLE_REQUIRED… : en tête, tel quel.
 }
 
 async function enregistrer(): Promise<void> {

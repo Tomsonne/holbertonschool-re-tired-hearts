@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { ApiError } from '../api/http';
 import { fetchMesSorties, type EventSummary } from '../api/sorties';
 import CarteSortie from '../components/CarteSortie.vue';
+import { estFinie } from '../formats';
 import { useSessionStore } from '../stores/session';
 
 // « Mes sorties » (mission 17) : GET /api/me/organized-events, toutes les sorties de
@@ -39,9 +40,16 @@ const groupes = computed<Groupe[]>(() => {
     },
     {
       id: 'a-cloturer',
-      titre: 'Passées, à clôturer',
-      aide: 'Une fois la sortie finie, clôturez-la depuis sa fiche.',
-      sorties: publiees.filter((s) => s.isPast).sort(parDate(-1)),
+      titre: 'Finies, à clôturer',
+      aide: 'La sortie est terminée : clôturez-la depuis sa fiche.',
+      sorties: publiees.filter((s) => estFinie(s)).sort(parDate(-1)),
+    },
+    {
+      // Commencée mais pas finie : ni modifiable, ni encore clôturable (l'API attend la fin).
+      id: 'en-cours',
+      titre: 'En cours',
+      aide: 'Elles ont commencé : vous pourrez les clôturer après l’heure de fin.',
+      sorties: publiees.filter((s) => s.isPast && !estFinie(s)).sort(parDate(1)),
     },
     {
       id: 'terminees',

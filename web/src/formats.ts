@@ -67,6 +67,9 @@ export function etatSortie(s: { status: string; isPast: boolean; availablePlaces
   return 'ouverte';
 }
 
+// isPast devient vrai dès le DÉBUT de la sortie ; l'API n'autorise la clôture qu'après sa FIN.
+export const estFinie = (s: { endsAt: string }, maintenant = Date.now()) => new Date(s.endsAt).getTime() <= maintenant;
+
 export const LIBELLES_ETAT_SORTIE: Record<EtatSortie, string> = {
   brouillon: 'Brouillon',
   annulee: 'Annulée',

@@ -224,7 +224,11 @@ describe('créer une sortie', () => {
     await wrapper.get('#sortie-departement').setValue('31');
 
     await soumettre(wrapper);
-    expect(wrapper.get('#sortie-code-postal-erreur').text()).toBe('Vérifiez ce champ : code postal invalide.');
+    // Message général et détail de l'API affichés mot pour mot (critère « telles quelles »).
+    expect(resume(wrapper).text()).toContain('Certaines informations sont manquantes ou invalides.');
+    expect(wrapper.get('#sortie-code-postal-erreur').text()).toBe('postalCode must match /^\\d{5}$/');
+    await resume(wrapper).get('a').trigger('click');
+    expect(document.activeElement?.id).toBe('sortie-code-postal');
 
     await soumettre(wrapper);
     expect(resume(wrapper).text()).toBe("Vous n'avez pas le rôle requis pour effectuer cette action.");

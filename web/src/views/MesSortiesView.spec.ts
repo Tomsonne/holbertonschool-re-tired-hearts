@@ -87,17 +87,25 @@ describe('« Mes sorties »', () => {
       sortie(1, { title: 'Pique-nique de juin', startsAt: '2099-06-01T10:00:00.000Z' }),
       sortie(2, { title: 'Brouillon d’automne', status: 'draft', startsAt: '2099-10-01T10:00:00.000Z' }),
       sortie(3, { title: 'Balade de mars', startsAt: '2099-03-01T10:00:00.000Z' }),
-      sortie(4, { title: 'Atelier passé', isPast: true, startsAt: '2020-03-01T10:00:00.000Z' }),
+      sortie(4, { title: 'Atelier passé', isPast: true, startsAt: '2020-03-01T10:00:00.000Z', endsAt: '2020-03-01T12:00:00.000Z' }),
+      // Commencée il y a une heure, finit dans une heure : pas encore clôturable.
+      sortie(7, {
+        title: 'Pique-nique en cours',
+        isPast: true,
+        startsAt: new Date(Date.now() - 3_600_000).toISOString(),
+        endsAt: new Date(Date.now() + 3_600_000).toISOString(),
+      }),
       sortie(5, { title: 'Concert clôturé', status: 'completed', isPast: true, startsAt: '2020-02-01T10:00:00.000Z' }),
       sortie(6, { title: 'Visite annulée', status: 'cancelled', startsAt: '2099-04-01T10:00:00.000Z' }),
     ]);
     const wrapper = await monter();
 
-    expect(wrapper.get('[role="status"]').text()).toBe('Vous organisez 6 sorties.');
+    expect(wrapper.get('[role="status"]').text()).toBe('Vous organisez 7 sorties.');
     expect(titres(wrapper)).toEqual([
       'Brouillons (1)',
       'À venir (2)',
-      'Passées, à clôturer (1)',
+      'Finies, à clôturer (1)',
+      'En cours (1)',
       'Terminées (1)',
       'Annulées (1)',
     ]);
@@ -107,6 +115,10 @@ describe('« Mes sorties »', () => {
     expect(wrapper.get('[aria-labelledby="groupe-brouillons"] .badge').text()).toBe('Brouillon');
     // Publiée mais passée : pour l'organisateur, c'est une action à faire, pas une sortie « Terminée ».
     expect(wrapper.get('[aria-labelledby="groupe-a-cloturer"] .badge').text()).toBe('À clôturer');
+    // Commencée mais pas finie : l'API refuserait la clôture (EVENT_NOT_FINISHED).
+    expect(cartes(wrapper, 'a-cloturer')).toEqual(['Atelier passé']);
+    expect(cartes(wrapper, 'en-cours')).toEqual(['Pique-nique en cours']);
+    expect(wrapper.get('[aria-labelledby="groupe-en-cours"] .badge').text()).toBe('En cours');
     // L'organisateur, c'est soi-même : la ligne est retirée.
     expect(wrapper.text()).not.toContain('Organisée par');
   });
