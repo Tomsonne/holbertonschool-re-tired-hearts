@@ -15,9 +15,11 @@ import EventView from './EventView.vue';
 vi.mock('../api/auth', () => ({ fetchMe: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() }));
 vi.mock('../api/interests', () => ({ fetchInterests: vi.fn() }));
 vi.mock('../api/sorties', () => ({ fetchEvents: vi.fn(), fetchEvent: vi.fn(), inscrire: vi.fn(), desinscrire: vi.fn() }));
+vi.mock('../api/messagerie', () => ({ demarrerConversation: vi.fn() }));
 const authApi = await import('../api/auth');
 const interestsApi = await import('../api/interests');
 const sortiesApi = await import('../api/sorties');
+const messagerieApi = await import('../api/messagerie');
 
 const visiteur: Me = {
   id: '44444444-4444-4444-4444-444444444444',
@@ -86,6 +88,7 @@ async function monter(chemin: string) {
       { path: '/membres/:userId', name: 'membre', component: vide },
       { path: '/mes-sorties', name: 'mes-sorties', component: vide },
       { path: '/sorties', name: 'sorties', component: EventsView, meta: { connexionRequise: true } },
+      { path: '/messages/:conversationId', name: 'conversation', component: vide },
       { path: '/sorties/nouvelle', name: 'nouvelle-sortie', component: vide },
       { path: '/sorties/:eventId/modifier', name: 'modifier-sortie', component: vide },
       { path: '/sorties/:eventId', name: 'sortie', component: EventView, meta: { connexionRequise: true } },
@@ -313,7 +316,7 @@ describe("détail d'une sortie", () => {
     expect(wrapper.get('#titre-bandeau-sortie').text()).toBe('Vous êtes inscrit');
     expect(wrapper.text()).toContain('2 allée Jules-Guesde');
     expect(wrapper.text()).toContain('3 places restantes sur 12');
-    expect(boutons(wrapper.get('.inscription-sortie'))).toEqual(['Me désinscrire']);
+    expect(boutons(wrapper.get('.inscription-sortie'))).toEqual(['Me désinscrire', 'Écrire à l’organisateur']);
   });
 
   it("inscription réussie mais relecture en échec : n'annonce pas l'adresse et permet de la recharger", async () => {
@@ -419,7 +422,8 @@ describe("détail d'une sortie", () => {
     const bandeau = wrapper.get('.bandeau-sortie');
     expect(bandeau.get('h3').text()).toBe('Sortie annulée');
     expect(bandeau.text()).toContain("Motif donné par l'organisateur : Météo défavorable");
-    expect(wrapper.find('.inscription-sortie button').exists()).toBe(false);
+    // Plus d'inscription possible ; un inscrit peut encore écrire à l'organisateur (R-MSG-3).
+    expect(boutons(wrapper.get('.inscription-sortie'))).toEqual(['Écrire à l’organisateur']);
     expect(wrapper.get('.inscription-sortie').text()).toContain('Les inscriptions sont fermées');
     expect(fiche(wrapper.get('.fiche')).Places).toBeUndefined();
   });
@@ -464,6 +468,54 @@ describe("détail d'une sortie", () => {
     // Il ne peut pas s'inscrire à sa propre sortie : la participation laisse place à la gestion.
     expect(wrapper.find('.inscription-sortie').exists()).toBe(false);
     expect(wrapper.get('.gestion-sortie h3').text()).toBe('Gérer cette sortie');
+  });
+
+  it("inscrit : « Écrire à l'organisateur » ouvre la conversation, avec la sortie en contexte", async () => {
+    vi.mocked(sortiesApi.fetchEvent).mockResolvedValue(
+      detail({ myRegistration: 'registered', canRegister: false, exactAddress: '2 allée Jules-Guesde' }),
+    );
+    vi.mocked(messagerieApi.demarrerConversation).mockResolvedValue({ id: 'c1' } as never);
+    const wrapper = await monter(`/sorties/${ID}`);
+
+    const zone = wrapper.get('.ecrire-organisateur');
+    expect(zone.text()).toContain('Écrivez à Marcel.');
+    await zone.get('button').trigger('click');
+    await flushPromises();
+
+    expect(messagerieApi.demarrerConversation).toHaveBeenCalledWith('22222222-2222-2222-2222-222222222222', ID);
+    expect(router.currentRoute.value.fullPath).toBe('/messages/c1');
+  });
+
+  it("refus de l'API (messages désactivés) : expliqué près du bouton, focalisé", async () => {
+    vi.mocked(sortiesApi.fetchEvent).mockResolvedValue(detail({ myRegistration: 'registered', canRegister: false }));
+    vi.mocked(messagerieApi.demarrerConversation).mockRejectedValue(
+      new ApiError(409, 'MESSAGING_DISABLED', 'Les messages privés ne sont pas acceptés.'),
+    );
+    const wrapper = await monter(`/sorties/${ID}`);
+
+    await wrapper.get('.ecrire-organisateur button').trigger('click');
+    await flushPromises();
+
+    const refus = wrapper.get('.ecrire-organisateur [role="alert"]');
+    expect(refus.text()).toBe('Les messages privés ne sont pas acceptés.');
+    expect(document.activeElement).toBe(refus.element);
+  });
+
+  it("non inscrit, ou organisateur indisponible : pas de bouton « Écrire à l'organisateur »", async () => {
+    vi.mocked(sortiesApi.fetchEvent).mockResolvedValueOnce(detail());
+    const nonInscrit = await monter(`/sorties/${ID}`);
+    expect(nonInscrit.find('.ecrire-organisateur').exists()).toBe(false);
+    document.body.innerHTML = '';
+
+    vi.mocked(sortiesApi.fetchEvent).mockResolvedValueOnce(
+      detail({
+        myRegistration: 'registered',
+        canRegister: false,
+        organizer: { userId: '22222222-2222-2222-2222-222222222222', displayName: 'Membre indisponible', isOrganizer: true },
+      }),
+    );
+    const indisponible = await monter(`/sorties/${ID}`);
+    expect(indisponible.find('.ecrire-organisateur').exists()).toBe(false);
   });
 
   it('le lien de retour ramène à la liste avec ses filtres', async () => {

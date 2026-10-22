@@ -31,6 +31,7 @@ async function monter() {
       { path: '/mon-profil', name: 'mon-profil', component: vide },
       { path: '/membres', name: 'membres', component: vide },
       { path: '/sorties', name: 'sorties', component: vide },
+      { path: '/messages', name: 'messages', component: vide },
       { path: '/mes-sorties', name: 'mes-sorties', component: vide },
     ],
   });
@@ -61,10 +62,11 @@ describe("zone de session de l'en-tête", () => {
     const { wrapper, router } = await monter();
 
     expect(wrapper.text()).toContain('Connecté en tant que Odette');
-    // Profil approuvé : accès aux sorties, à la découverte des membres et à son profil.
+    // Profil approuvé : sorties, découverte des membres, messagerie et profil.
     expect(wrapper.findAll('a').map((a) => [a.text(), a.attributes('href')])).toEqual([
       ['Les sorties', '/sorties'],
       ['Les membres', '/membres'],
+      ['Messages', '/messages'],
       ['Mon profil', '/mon-profil'],
     ]);
     await wrapper.get('button').trigger('click');
@@ -80,7 +82,8 @@ describe("zone de session de l'en-tête", () => {
     vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, profileStatus: 'pending' });
     const { wrapper } = await monter();
 
-    expect(wrapper.findAll('a').map((a) => a.text())).toEqual(['Les sorties', 'Mon profil']);
+    // La messagerie reste ouverte en lecture (R-MSG-7).
+    expect(wrapper.findAll('a').map((a) => a.text())).toEqual(['Les sorties', 'Messages', 'Mon profil']);
   });
 
   it('propose « Mes sorties » à un organisateur approuvé, pas à un organisateur en attente', async () => {
@@ -90,16 +93,17 @@ describe("zone de session de l'en-tête", () => {
       'Les sorties',
       'Mes sorties',
       'Les membres',
+      'Messages',
       'Mon profil',
     ]);
 
     setActivePinia(createPinia());
     vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, role: 'organizer', profileStatus: 'pending' });
     const enAttente = await monter();
-    expect(enAttente.wrapper.findAll('a').map((a) => a.text())).toEqual(['Les sorties', 'Mon profil']);
+    expect(enAttente.wrapper.findAll('a').map((a) => a.text())).toEqual(['Les sorties', 'Messages', 'Mon profil']);
   });
 
-  it('ne propose ni les sorties ni les membres à un profil bloqué ou un compte suspendu', async () => {
+  it('ne propose ni les sorties, ni les membres, ni les messages à un profil bloqué ou un compte suspendu', async () => {
     vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, profileStatus: 'blocked' });
     const bloque = await monter();
     expect(bloque.wrapper.findAll('a').map((a) => a.text())).toEqual(['Mon profil']);

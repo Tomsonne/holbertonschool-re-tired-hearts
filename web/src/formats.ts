@@ -85,6 +85,40 @@ export function formaterPlaces(s: { availablePlaces: number; capacity: number })
   return `${s.availablePlaces} place${pluriel} restante${pluriel} sur ${s.capacity}`;
 }
 
+// ---------- Messagerie (mission 21) ----------
+
+// Même nettoyage que l'API (R-MSG-6) : espaces et retours à la ligne réduits à un espace, puis
+// bords retirés. La longueur se compte en caractères visibles (un emoji = 1), comme l'API.
+export const MESSAGE_MAX = 1000;
+export const nettoyerMessage = (texte: string) => texte.replace(/\s+/gu, ' ').trim();
+export const longueurMessage = (texte: string) => Array.from(nettoyerMessage(texte)).length;
+
+// cannotSendReason est un code : on le traduit en une explication et une piste.
+export const RAISONS_ENVOI_IMPOSSIBLE: Record<string, string> = {
+  RECIPIENT_UNAVAILABLE: "Ce membre n'est plus disponible : vous pouvez relire la conversation, mais plus lui écrire.",
+  MESSAGING_DISABLED:
+    "Les messages privés sont désactivés, par vous ou par ce membre. Vous pouvez les réactiver dans « Mon profil ».",
+  PROFILE_NOT_APPROVED: 'Votre profil doit être approuvé par un modérateur pour envoyer des messages.',
+};
+
+const formatJourCourt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: FUSEAU });
+
+// « Aujourd'hui à 14 h 30 », « Hier à 9 h », « 12 octobre 2026 à 18 h 05 » (heure de Paris).
+// On compare des jours du calendrier à Paris, jamais des durées : aux changements d'heure, deux
+// jours consécutifs sont séparés de 23 ou 25 heures, et « maintenant − 24 h » tomberait à côté.
+export function formaterMoment(iso: string, maintenant = new Date()): string {
+  const date = new Date(iso);
+  const jourMessage = partiesParis(iso)?.date;
+  const aujourdhui = partiesParis(maintenant.toISOString())?.date;
+  if (!jourMessage || !aujourdhui) return '';
+  // Veille calendaire de « aujourd'hui » : Date.UTC gère seul les fins de mois et d'année.
+  const [a, m, j] = aujourdhui.split('-').map(Number);
+  const hier = new Date(Date.UTC(a, m - 1, j - 1)).toISOString().slice(0, 10);
+  const quand =
+    jourMessage === aujourdhui ? "Aujourd'hui" : jourMessage === hier ? 'Hier' : formatJourCourt.format(date);
+  return `${quand} à ${heure(date)}`;
+}
+
 // ---------- Saisie des dates d'une sortie (mission 17) ----------
 // Le formulaire se remplit à l'heure de Paris, comme l'affichage : « 14:30 » veut dire 14 h 30
 // à Paris, quel que soit le réglage de l'appareil. L'API reçoit et renvoie des dates ISO (UTC).
