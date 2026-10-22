@@ -9,6 +9,7 @@ import {
   TAILLE_PAGE_MESSAGES,
   type Conversation,
   type Message,
+  type RaisonEnvoiImpossible,
 } from '../api/messagerie';
 import { formaterMoment, longueurMessage, MESSAGE_MAX, RAISONS_ENVOI_IMPOSSIBLE } from '../formats';
 import { useSessionStore } from '../stores/session';
@@ -43,9 +44,10 @@ const titreMessages = ref<HTMLElement | null>(null);
 const longueur = computed(() => longueurMessage(texte.value));
 const autre = computed(() => conversation.value?.otherParticipant ?? null);
 const lienFiche = computed(() => !!autre.value?.available && session.estApprouve);
+// Jamais vide : sans motif reconnu, une explication générale reste affichée.
 const raisonEnvoiImpossible = computed(() => {
   const code = conversation.value?.cannotSendReason;
-  return code ? (RAISONS_ENVOI_IMPOSSIBLE[code] ?? 'Vous ne pouvez pas écrire dans cette conversation.') : '';
+  return (code && RAISONS_ENVOI_IMPOSSIBLE[code]) || 'Vous ne pouvez pas écrire dans cette conversation pour le moment.';
 });
 
 // Une conversation demandée avant une autre ne doit pas l'écraser.
@@ -138,11 +140,14 @@ async function actualiser(): Promise<void> {
 }
 
 // Envoi impossible découvert à l'envoi : la fiche est relue, le formulaire laisse place à l'explication.
-async function passerEnLectureSeule(): Promise<void> {
+// Le motif renvoyé par l'API à l'envoi est conservé : si la relecture échoue, ou ne précise pas
+// de motif, c'est lui qui est expliqué.
+async function passerEnLectureSeule(motif: RaisonEnvoiImpossible): Promise<void> {
   try {
-    conversation.value = await fetchConversation(identifiant());
+    const relue = await fetchConversation(identifiant());
+    conversation.value = relue.canSend ? relue : { ...relue, cannotSendReason: relue.cannotSendReason ?? motif };
   } catch {
-    if (conversation.value) conversation.value = { ...conversation.value, canSend: false };
+    if (conversation.value) conversation.value = { ...conversation.value, canSend: false, cannotSendReason: motif };
   }
   await nextTick();
   zoneEnvoiImpossible.value?.focus();
@@ -177,7 +182,7 @@ async function envoyer(): Promise<void> {
         const u = session.utilisateur;
         if (u) session.synchroniserProfil({ displayName: u.displayName, status: 'pending' });
       }
-      await passerEnLectureSeule();
+      await passerEnLectureSeule(e.code as RaisonEnvoiImpossible);
       return;
     }
     if (gererRefus(e)) return;
