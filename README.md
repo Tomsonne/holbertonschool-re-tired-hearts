@@ -14,13 +14,28 @@ Projet pédagogique Holberton — **NestJS + Vue.js + PostgreSQL**.
 | Pour qui | Parcours |
 |---|---|
 | Visiteur | Accueil, centres d'intérêt, inscription, connexion, vie privée, mentions légales |
-| Membre (profil en attente) | Compléter son profil (ville via la recherche de communes, centres d'intérêt), consulter les sorties, relire ses conversations |
+| Membre (profil en attente) | Compléter son profil (ville via la recherche de communes, centres d'intérêt), consulter les sorties |
 | Membre approuvé | Découvrir les membres (filtres centre d'intérêt et département), s'inscrire à une sortie et s'en désinscrire, voir l'adresse exacte une fois inscrit, écrire aux participants d'une même sortie ou à l'organisateur |
 | Organisateur | Créer une sortie (brouillon), la modifier, la publier, l'annuler avec un motif, la clôturer ; retrouver toutes ses sorties dans « Mes sorties » |
 | Modérateur | Files des profils, des comptes et des sorties : approuver, bloquer, suspendre, réactiver, changer le rôle, annuler une sortie ; chaque décision est journalisée. Aucun accès aux messages |
 
 Les règles détaillées (statuts, visibilité, capacité, éligibilité des conversations) sont dans
 [docs/regles-metier.md](docs/regles-metier.md).
+
+## API
+
+L'API NestJS expose ses routes sous `/api` : santé et centres d'intérêt, comptes et profils,
+découverte des membres, sorties et inscriptions, conversations et messages, modération, et recherche
+de communes. La liste détaillée des routes, permissions, formats de réponse et erreurs est décrite
+dans [docs/contrats-api.md](docs/contrats-api.md) ; les routes déjà implémentées sont également
+consultables dans Swagger sur `/api/docs`.
+
+Les sessions utilisent un cookie `httpOnly`, `SameSite=Strict`, valable deux heures et `Secure` en
+production. L'API vérifie les statuts, rôles et droits sur chaque ressource ; les DTO valident les
+entrées et rejettent les champs inconnus. Les erreurs renvoyées suivent un format JSON commun et les
+routes sensibles sont limitées en débit. Le navigateur ne se connecte jamais directement à PostgreSQL ;
+seule l'API appelle le service externe de recherche de communes, avec un délai maximal de trois secondes
+et une saisie manuelle de secours en cas d'indisponibilité.
 
 ## Documentation
 
@@ -198,13 +213,13 @@ lock régénéré.
 ## Tests
 
 ```bash
-cd api && npm test                  # tests unitaires Jest
-cd api && npm run test:issues       # tests de recette par issue (sans base de données)
-docker compose up -d db             # requis pour les deux commandes suivantes
-cd api && npm run test:integration  # règles d'événement, inscriptions, messagerie, seed (PostgreSQL)
-cd api && npm run test:e2e          # voir ci-dessous : variables à fournir
-cd web && npm test                  # tests de composants Vitest
-cd web && npm run build             # vérification des types (vue-tsc) puis compilation
+npm --prefix api test                   # tests unitaires Jest
+npm --prefix api run test:issues        # tests de recette par issue (sans base de données)
+docker compose up -d db                 # requis pour les deux commandes suivantes
+npm --prefix api run test:integration  # règles d'événement, inscriptions, messagerie, seed (PostgreSQL)
+npm --prefix api run test:e2e          # voir ci-dessous : variables à fournir
+npm --prefix web test                   # tests de composants Vitest
+npm --prefix web run build              # vérification des types (vue-tsc) puis compilation
 ```
 
 Résultats relevés le 22 octobre 2026 sur `main` (commit `50203c2`), avec PostgreSQL 16 :
