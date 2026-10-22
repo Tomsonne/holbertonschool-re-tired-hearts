@@ -91,6 +91,27 @@ export const router = createRouter({
       component: () => import('../views/ConversationView.vue'),
       meta: { title: 'Conversation', connexionRequise: true },
     },
+    // Back-office de modération (mission 25) : réservé aux modérateurs, côté route (garde) comme
+    // côté API (403 ROLE_REQUIRED sur chaque route /api/moderation).
+    { path: '/moderation', redirect: { name: 'moderation-profils' } },
+    {
+      path: '/moderation/profils',
+      name: 'moderation-profils',
+      component: () => import('../views/ModerationProfilsView.vue'),
+      meta: { title: 'Modération des profils', connexionRequise: true, moderateurRequis: true },
+    },
+    {
+      path: '/moderation/comptes',
+      name: 'moderation-comptes',
+      component: () => import('../views/ModerationComptesView.vue'),
+      meta: { title: 'Modération des comptes', connexionRequise: true, moderateurRequis: true },
+    },
+    {
+      path: '/moderation/sorties',
+      name: 'moderation-sorties',
+      component: () => import('../views/ModerationSortiesView.vue'),
+      meta: { title: 'Modération des sorties', connexionRequise: true, moderateurRequis: true },
+    },
   ],
 });
 

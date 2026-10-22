@@ -155,3 +155,10 @@ export function isoDepuisParis(date: string, heure: string): string | null {
   const relu = partiesParis(new Date(instant).toISOString());
   return relu?.date === date && relu.heure === heure ? new Date(instant).toISOString() : null;
 }
+
+// ---------- Back-office (mission 25) ----------
+// « 12 octobre 2026 », à l'heure de Paris (même format que les dates de la messagerie).
+export function formaterDate(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? '' : formatJourCourt.format(date);
+}

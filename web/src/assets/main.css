@@ -1196,6 +1196,112 @@ a.bouton {
   }
 }
 
+/* ---------- Back-office de modération ---------- */
+.nav-moderation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 1.5rem;
+}
+
+.nav-moderation .bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+}
+
+/* File affichée : soulignée et en gras, pas seulement colorée. */
+.nav-moderation .bouton[aria-current='page'] {
+  background: var(--vert);
+  color: var(--papier);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.moderation h3:focus {
+  outline: none;
+}
+
+.moderation__filtre {
+  max-width: 20rem;
+}
+
+.liste-moderation {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  gap: 1.2rem;
+}
+
+.carte-moderation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.3rem;
+  min-width: 0;
+}
+
+.carte-moderation > p {
+  margin: 0;
+}
+
+.carte-moderation__titre {
+  margin: 0;
+  font-size: 1.3rem;
+  overflow-wrap: anywhere;
+}
+
+.carte-moderation__titre a {
+  color: var(--vert);
+}
+
+.carte-moderation__bio {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-style: italic;
+}
+
+.carte-moderation__actions,
+.confirmation-action .confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.carte-moderation .message:focus,
+.confirmation-action:focus {
+  outline: 3px solid var(--vert);
+  outline-offset: 3px;
+}
+
+.confirmation-action {
+  border-top: 1px solid var(--filet);
+  padding-top: 1rem;
+}
+
+.confirmation-action__question {
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+
+.badge--profil-pending {
+  border-color: var(--encre-douce);
+  color: var(--encre-douce);
+}
+
+.badge--profil-approved {
+  border-color: var(--vert);
+  color: var(--vert);
+}
+
+.badge--profil-blocked {
+  border-color: var(--bordeaux);
+  background: var(--bordeaux);
+  color: var(--blanc-casse);
+}
+
 /* ---------- Centres d'intérêt ---------- */
 .liste-interets {
   list-style: none;

@@ -10,6 +10,8 @@ declare module 'vue-router' {
     connexionRequise?: boolean;
     // Page réservée aux visiteurs non connectés (connexion, inscription).
     invitesSeulement?: boolean;
+    // Back-office de modération : réservé aux modérateurs dont le compte est actif.
+    moderateurRequis?: boolean;
   }
 }
 
@@ -37,6 +39,12 @@ export async function gardeDeSession(to: RouteLocationNormalized): Promise<true 
   if (to.meta.connexionRequise && !session.estConnecte) {
     // On garde la page demandée pour y revenir après la connexion.
     return { name: 'connexion', query: { redirect: to.fullPath } };
+  }
+
+  // Un membre qui tape l'adresse du back-office revient à l'accueil. L'API refuse de toute façon
+  // chaque route de modération (403 ROLE_REQUIRED) : la garde évite seulement une page vide.
+  if (to.meta.moderateurRequis && !(session.estModerateur && !session.estSuspendu)) {
+    return { name: 'accueil' };
   }
 
   if (to.meta.invitesSeulement && session.estConnecte) {
