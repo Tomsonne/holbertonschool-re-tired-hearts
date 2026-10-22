@@ -77,6 +77,20 @@ export const router = createRouter({
       component: () => import('../views/EventView.vue'),
       meta: { title: 'Une sortie', connexionRequise: true },
     },
+    // Messagerie : tout compte actif dont le profil n'est pas bloqué peut relire ses conversations
+    // (R-MSG-7) ; l'écran explique les refus, l'API refait ses contrôles.
+    {
+      path: '/messages',
+      name: 'messages',
+      component: () => import('../views/InboxView.vue'),
+      meta: { title: 'Mes messages', connexionRequise: true },
+    },
+    {
+      path: '/messages/:conversationId',
+      name: 'conversation',
+      component: () => import('../views/ConversationView.vue'),
+      meta: { title: 'Conversation', connexionRequise: true },
+    },
   ],
 });
 

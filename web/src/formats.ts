@@ -85,6 +85,34 @@ export function formaterPlaces(s: { availablePlaces: number; capacity: number })
   return `${s.availablePlaces} place${pluriel} restante${pluriel} sur ${s.capacity}`;
 }
 
+// ---------- Messagerie (mission 21) ----------
+
+// Même nettoyage que l'API (R-MSG-6) : espaces et retours à la ligne réduits à un espace, puis
+// bords retirés. La longueur se compte en caractères visibles (un emoji = 1), comme l'API.
+export const MESSAGE_MAX = 1000;
+export const nettoyerMessage = (texte: string) => texte.replace(/\s+/gu, ' ').trim();
+export const longueurMessage = (texte: string) => Array.from(nettoyerMessage(texte)).length;
+
+// cannotSendReason est un code : on le traduit en une explication et une piste.
+export const RAISONS_ENVOI_IMPOSSIBLE: Record<string, string> = {
+  RECIPIENT_UNAVAILABLE: "Ce membre n'est plus disponible : vous pouvez relire la conversation, mais plus lui écrire.",
+  MESSAGING_DISABLED:
+    "Les messages privés sont désactivés, par vous ou par ce membre. Vous pouvez les réactiver dans « Mon profil ».",
+  PROFILE_NOT_APPROVED: 'Votre profil doit être approuvé par un modérateur pour envoyer des messages.',
+};
+
+const formatJourCourt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: FUSEAU });
+
+// « Aujourd'hui à 14 h 30 », « Hier à 9 h », « 12 octobre 2026 à 18 h 05 » (heure de Paris).
+export function formaterMoment(iso: string, maintenant = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const jour = (d: Date) => formatJourCourt.format(d);
+  const hier = new Date(maintenant.getTime() - 24 * 3600 * 1000);
+  const quand = jour(date) === jour(maintenant) ? "Aujourd'hui" : jour(date) === jour(hier) ? 'Hier' : jour(date);
+  return `${quand} à ${heure(date)}`;
+}
+
 // ---------- Saisie des dates d'une sortie (mission 17) ----------
 // Le formulaire se remplit à l'heure de Paris, comme l'affichage : « 14:30 » veut dire 14 h 30
 // à Paris, quel que soit le réglage de l'appareil. L'API reçoit et renvoie des dates ISO (UTC).

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { fetchProfile, type PublicProfile } from '../api/decouverte';
 import { ApiError } from '../api/http';
+import { demarrerConversation } from '../api/messagerie';
 import AccesReserve from '../components/AccesReserve.vue';
 import { lireFiltres, versQuery } from '../router/filtresMembres';
 import { formaterLocalisation, formaterMembreDepuis, LIBELLES_RECHERCHE } from '../formats';
@@ -13,6 +14,7 @@ import { useSessionStore } from '../stores/session';
 // il n'apparaîtrait pas à l'écran.
 
 const route = useRoute();
+const router = useRouter();
 const session = useSessionStore();
 
 const etat = ref<'chargement' | 'erreur' | 'indisponible' | 'pret'>('chargement');
@@ -58,6 +60,34 @@ async function charger(): Promise<void> {
     }
     erreur.value = e instanceof ApiError ? e.message : 'Une erreur est survenue. Merci de réessayer.';
     etat.value = 'erreur';
+  }
+}
+
+// ---------- Écrire un message (mission 21) ----------
+// L'écran ne connaît pas l'éligibilité (sortie commune, R-MSG-1) : l'API décide. Si elle refuse,
+// son message est affiché près du bouton. Si la conversation existe déjà, elle est rouverte.
+const ouvertureEnCours = ref(false);
+const refusMessage = ref<string | null>(null);
+const zoneRefusMessage = ref<HTMLElement | null>(null);
+
+async function ecrire(): Promise<void> {
+  if (!membre.value || ouvertureEnCours.value) return;
+  ouvertureEnCours.value = true;
+  refusMessage.value = null;
+  try {
+    const conversation = await demarrerConversation(membre.value.userId);
+    await router.push({ name: 'conversation', params: { conversationId: conversation.id } });
+  } catch (e) {
+    refusMessage.value =
+      e instanceof ApiError && e.code === 'NOT_ELIGIBLE'
+        ? `${e.message} Vous pourrez écrire à ${membre.value.displayName} après avoir participé à une même sortie.`
+        : e instanceof ApiError
+          ? e.message
+          : 'La conversation n’a pas pu être ouverte. Vérifiez votre connexion internet, puis réessayez.';
+    await nextTick();
+    zoneRefusMessage.value?.focus();
+  } finally {
+    ouvertureEnCours.value = false;
   }
 }
 
@@ -107,5 +137,14 @@ watch(() => route.params.userId, (id) => id && charger());
       <dt>Membre depuis</dt>
       <dd>{{ formaterMembreDepuis(membre.memberSince) }}</dd>
     </dl>
+
+    <div v-if="membre.acceptsMessages" class="fiche-membre__ecrire">
+      <button type="button" class="bouton" :disabled="ouvertureEnCours" @click="ecrire">
+        {{ ouvertureEnCours ? 'Ouverture…' : 'Écrire un message' }}
+      </button>
+      <p v-if="refusMessage" ref="zoneRefusMessage" class="message message--info" role="alert" tabindex="-1">
+        {{ refusMessage }}
+      </p>
+    </div>
   </article>
 </template>

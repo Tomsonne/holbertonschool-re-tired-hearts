@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { etatSortie, formaterHoraire, formaterPlaces, isoDepuisParis, partiesParis } from './formats';
+import {
+  etatSortie,
+  formaterHoraire,
+  formaterMoment,
+  formaterPlaces,
+  isoDepuisParis,
+  longueurMessage,
+  nettoyerMessage,
+  partiesParis,
+} from './formats';
 
 // Les heures utilisent des espaces insécables ; on les rend visibles pour comparer.
 const lisible = (texte: string) => texte.replace(/\u00a0/g, ' ');
@@ -64,5 +73,24 @@ describe('saisie des dates à l’heure de Paris', () => {
     expect(isoDepuisParis('2026-06-01', '25:00')).toBeNull();
     expect(isoDepuisParis('', '10:00')).toBeNull();
     expect(partiesParis('pas une date')).toBeNull();
+  });
+});
+
+describe('messagerie', () => {
+  it("nettoie et compte un message comme l'API", () => {
+    expect(nettoyerMessage('  Bonjour\n\n  à   tous  ')).toBe('Bonjour à tous');
+    expect(longueurMessage('  Bonjour\n\n  à   tous  ')).toBe(14);
+    // Un emoji compte pour un caractère, comme Array.from côté API.
+    expect(longueurMessage('Merci 🌻')).toBe(7);
+    expect(longueurMessage('   \n  ')).toBe(0);
+  });
+
+  it("date d'un message : aujourd'hui, hier, sinon la date, à l'heure de Paris", () => {
+    const maintenant = new Date('2026-10-22T10:00:00.000Z');
+    const lisible = (t: string) => t.replace(/\u00a0/g, ' ');
+    expect(lisible(formaterMoment('2026-10-22T07:30:00.000Z', maintenant))).toBe("Aujourd'hui à 9 h 30");
+    expect(lisible(formaterMoment('2026-10-21T16:05:00.000Z', maintenant))).toBe('Hier à 18 h 05');
+    expect(lisible(formaterMoment('2026-10-12T16:05:00.000Z', maintenant))).toBe('12 octobre 2026 à 18 h 05');
+    expect(formaterMoment('pas une date', maintenant)).toBe('');
   });
 });

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ApiError } from '../api/http';
+import { demarrerConversation } from '../api/messagerie';
 import { desinscrire, fetchEvent, inscrire, type EventDetail } from '../api/sorties';
 import GestionSortie from '../components/GestionSortie.vue';
 import SortiesInaccessibles from '../components/SortiesInaccessibles.vue';
@@ -42,6 +43,36 @@ const identifiant = () => String(route.params.eventId);
 
 const etatAffiche = computed(() => (sortie.value ? etatSortie(sortie.value) : null));
 const estInscrit = computed(() => sortie.value?.myRegistration === 'registered');
+
+// ---------- Écrire à l'organisateur (mission 21) ----------
+// Un inscrit peut écrire à l'organisateur (R-MSG-1), même après une annulation. La sortie est
+// passée en contexte (eventId) : l'API vérifie que c'est bien elle qui justifie le contact.
+const router = useRouter();
+const peutEcrireOrganisateur = computed(
+  () => estInscrit.value && !sortie.value?.isOrganizer && session.estApprouve &&
+    sortie.value?.organizer.displayName !== 'Membre indisponible',
+);
+const ouvertureConversation = ref(false);
+const refusConversation = ref<string | null>(null);
+const zoneRefusConversation = ref<HTMLElement | null>(null);
+
+async function ecrireOrganisateur(): Promise<void> {
+  if (!sortie.value || ouvertureConversation.value) return;
+  ouvertureConversation.value = true;
+  refusConversation.value = null;
+  try {
+    const conversation = await demarrerConversation(sortie.value.organizer.userId, sortie.value.id);
+    await router.push({ name: 'conversation', params: { conversationId: conversation.id } });
+  } catch (e) {
+    refusConversation.value = e instanceof ApiError
+      ? e.message
+      : 'La conversation n’a pas pu être ouverte. Vérifiez votre connexion internet, puis réessayez.';
+    await nextTick();
+    zoneRefusConversation.value?.focus();
+  } finally {
+    ouvertureConversation.value = false;
+  }
+}
 // Annulée ou terminée : plus rien à faire, le bandeau suffit (R-EVT-8).
 const estOuverte = computed(() => etatAffiche.value === 'ouverte' || etatAffiche.value === 'complete');
 const lienOrganisateur = computed(() => session.estApprouve && !sortie.value?.isOrganizer);
@@ -438,6 +469,21 @@ watch(() => route.params.eventId, (id) => id && charger());
             <RouterLink :to="{ name: 'mon-profil' }">Compléter ou vérifier mon profil</RouterLink>
           </p>
         </template>
+
+        <div v-if="peutEcrireOrganisateur" class="ecrire-organisateur">
+          <p>Une question sur la sortie ? Écrivez à {{ sortie.organizer.displayName }}.</p>
+          <button
+            type="button"
+            class="bouton bouton--secondaire"
+            :disabled="ouvertureConversation"
+            @click="ecrireOrganisateur"
+          >
+            {{ ouvertureConversation ? 'Ouverture…' : 'Écrire à l’organisateur' }}
+          </button>
+          <p v-if="refusConversation" ref="zoneRefusConversation" class="message message--info" role="alert" tabindex="-1">
+            {{ refusConversation }}
+          </p>
+        </div>
       </section>
     </div>
   </article>
