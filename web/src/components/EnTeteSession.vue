@@ -44,6 +44,11 @@ async function seDeconnecter(): Promise<void> {
       >Mes sorties</RouterLink>
       <RouterLink v-if="session.estApprouve" class="bouton bouton--secondaire" :to="{ name: 'membres' }">Les membres</RouterLink>
       <RouterLink v-if="session.peutVoirSorties" class="bouton bouton--secondaire" :to="{ name: 'messages' }">Messages</RouterLink>
+      <RouterLink
+        v-if="session.estModerateur && !session.estSuspendu"
+        class="bouton bouton--secondaire"
+        :to="{ name: 'moderation-profils' }"
+      >Modération</RouterLink>
       <RouterLink class="bouton bouton--secondaire" :to="{ name: 'mon-profil' }">Mon profil</RouterLink>
       <button type="button" class="bouton bouton--secondaire" :disabled="deconnexionEnCours" @click="seDeconnecter">
         {{ deconnexionEnCours ? 'Déconnexion…' : erreurDeconnexion ? 'Réessayer la déconnexion' : 'Se déconnecter' }}

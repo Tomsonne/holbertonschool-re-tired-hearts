@@ -27,6 +27,12 @@ function routeurDeTest() {
       { path: '/', name: 'accueil', component: vide },
       { path: '/connexion', name: 'connexion', component: vide, meta: { invitesSeulement: true } },
       { path: '/mon-profil', name: 'mon-profil', component: vide, meta: { connexionRequise: true } },
+      {
+        path: '/moderation',
+        name: 'moderation',
+        component: vide,
+        meta: { connexionRequise: true, moderateurRequis: true },
+      },
     ],
   });
   router.beforeEach(gardeDeSession);
@@ -47,6 +53,38 @@ describe('garde de navigation', () => {
 
     expect(router.currentRoute.value.name).toBe('connexion');
     expect(router.currentRoute.value.query.redirect).toBe('/mon-profil');
+  });
+
+  it.each([
+    ['un membre', { role: 'member' as const }],
+    ['un organisateur', { role: 'organizer' as const }],
+    ['un modérateur suspendu', { role: 'moderator' as const, accountStatus: 'suspended' as const }],
+  ])('renvoie %s à l’accueil depuis le back-office de modération', async (_cas, surcharge) => {
+    vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, ...surcharge });
+    const router = routeurDeTest();
+
+    await router.push('/moderation');
+
+    expect(router.currentRoute.value.name).toBe('accueil');
+  });
+
+  it('laisse un modérateur actif ouvrir le back-office', async () => {
+    vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, role: 'moderator' });
+    const router = routeurDeTest();
+
+    await router.push('/moderation');
+
+    expect(router.currentRoute.value.name).toBe('moderation');
+  });
+
+  it('envoie un visiteur non connecté vers la connexion avant le back-office', async () => {
+    vi.mocked(authApi.fetchMe).mockRejectedValue(new ApiError(401, 'UNAUTHENTICATED', 'Merci de vous connecter.'));
+    const router = routeurDeTest();
+
+    await router.push('/moderation');
+
+    expect(router.currentRoute.value.name).toBe('connexion');
+    expect(router.currentRoute.value.query.redirect).toBe('/moderation');
   });
 
   it('laisse passer un membre connecté', async () => {

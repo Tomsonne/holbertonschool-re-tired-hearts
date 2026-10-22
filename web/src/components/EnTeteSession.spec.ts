@@ -33,6 +33,7 @@ async function monter() {
       { path: '/sorties', name: 'sorties', component: vide },
       { path: '/messages', name: 'messages', component: vide },
       { path: '/mes-sorties', name: 'mes-sorties', component: vide },
+      { path: '/moderation/profils', name: 'moderation-profils', component: vide },
     ],
   });
   await router.push('/page');
@@ -112,6 +113,16 @@ describe("zone de session de l'en-tête", () => {
     vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, accountStatus: 'suspended' });
     const suspendu = await monter();
     expect(suspendu.wrapper.findAll('a').map((a) => a.text())).toEqual(['Mon profil']);
+  });
+
+  it('propose « Modération » au seul modérateur actif', async () => {
+    vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, role: 'moderator' });
+    const { wrapper } = await monter();
+
+    expect(wrapper.findAll('a').map((a) => [a.text(), a.attributes('href')])).toContainEqual([
+      'Modération',
+      '/moderation/profils',
+    ]);
   });
 
   it("signale une déconnexion échouée, reste connecté et permet de réessayer", async () => {
