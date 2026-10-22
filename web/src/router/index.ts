@@ -22,6 +22,19 @@ export const router = createRouter({
       component: () => import('../views/RegisterView.vue'),
       meta: { title: 'Inscription', invitesSeulement: true },
     },
+    // Pages publiques (R-PROF-6) : lisibles sans compte, atteignables depuis le pied de page.
+    {
+      path: '/vie-privee',
+      name: 'vie-privee',
+      component: () => import('../views/ViePriveeView.vue'),
+      meta: { title: 'Vos données et votre vie privée' },
+    },
+    {
+      path: '/mentions-legales',
+      name: 'mentions-legales',
+      component: () => import('../views/MentionsLegalesView.vue'),
+      meta: { title: 'Mentions légales' },
+    },
     // Pages réservées aux membres connectés : la garde envoie vers la connexion, puis revient ici.
     {
       path: '/mon-profil',

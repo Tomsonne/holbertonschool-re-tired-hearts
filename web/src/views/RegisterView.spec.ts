@@ -29,6 +29,7 @@ async function monter() {
       { path: '/', name: 'accueil', component: vide },
       { path: '/connexion', name: 'connexion', component: vide, meta: { invitesSeulement: true } },
       { path: '/inscription', name: 'inscription', component: RegisterView, meta: { invitesSeulement: true } },
+      { path: '/vie-privee', name: 'vie-privee', component: vide },
       { path: '/mon-profil', name: 'mon-profil', component: vide, meta: { connexionRequise: true } },
     ],
   });
@@ -65,6 +66,14 @@ describe("écran d'inscription", () => {
     expect(wrapper.get('label[for="inscription-nom"]').text()).toBe('Nom affiché');
     expect(wrapper.get('#inscription-nom').attributes('aria-describedby')).toBe('inscription-nom-aide');
     expect(wrapper.get('#inscription-nom-aide').text()).toContain('Évitez votre nom complet');
+  });
+
+  it('explique, avant de créer le compte, où lire ce que deviennent les données', async () => {
+    const wrapper = await monter();
+
+    const lien = wrapper.get('form .formulaire__vie-privee a');
+    expect(lien.text()).toBe('Ce que nous faisons de vos données');
+    expect(lien.attributes('href')).toBe('/vie-privee');
   });
 
   it("refuse un mot de passe trop court et un nom d'un caractère sans appeler l'API", async () => {

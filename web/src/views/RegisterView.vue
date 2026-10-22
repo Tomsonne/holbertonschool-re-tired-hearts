@@ -267,6 +267,10 @@ function continuer(): void {
           {{ envoiEnCours ? 'Création en cours…' : 'Créer mon compte' }}
         </button>
         <p v-if="envoiEnCours" class="visuellement-cache" role="status">Création du compte en cours, merci de patienter.</p>
+        <p class="champ__aide formulaire__vie-privee">
+          Votre e-mail n'est jamais montré aux autres membres.
+          <RouterLink :to="{ name: 'vie-privee' }">Ce que nous faisons de vos données</RouterLink>
+        </p>
       </form>
     </section>
 
