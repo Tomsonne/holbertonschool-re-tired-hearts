@@ -320,6 +320,36 @@ describe('conversation', () => {
     expect(wrapper.find('h2 a').exists()).toBe(false);
   });
 
+  it("envoi refusé puis relecture en échec : le motif de l'API est quand même expliqué", async () => {
+    vi.mocked(messagerieApi.fetchConversation)
+      .mockResolvedValueOnce(conversation())
+      .mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'Le service est momentanément indisponible.'));
+    vi.mocked(messagerieApi.fetchMessages).mockResolvedValue([message(1)]);
+    vi.mocked(messagerieApi.envoyerMessage).mockRejectedValue(
+      new ApiError(409, 'MESSAGING_DISABLED', 'Les messages privés ne sont pas acceptés.'),
+    );
+    const wrapper = await monter(`/messages/${ID}`);
+
+    await wrapper.get('#nouveau-message').setValue('Bonjour');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(wrapper.find('form').exists()).toBe(false);
+    const zone = wrapper.get('.conversation__lecture-seule');
+    expect(zone.text()).toContain('Les messages privés sont désactivés');
+    expect(document.activeElement).toBe(zone.element);
+  });
+
+  it('envoi impossible sans motif reconnu : une explication générale, jamais un message vide', async () => {
+    vi.mocked(messagerieApi.fetchConversation).mockResolvedValue(conversation({ canSend: false, cannotSendReason: null }));
+    vi.mocked(messagerieApi.fetchMessages).mockResolvedValue([]);
+    const wrapper = await monter(`/messages/${ID}`);
+
+    expect(wrapper.get('.conversation__lecture-seule p').text()).toBe(
+      'Vous ne pouvez pas écrire dans cette conversation pour le moment.',
+    );
+  });
+
   it.each([
     ['MESSAGING_DISABLED', 'Les messages privés sont désactivés'],
     ['PROFILE_NOT_APPROVED', 'Votre profil doit être approuvé'],
