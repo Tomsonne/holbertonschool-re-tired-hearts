@@ -5,9 +5,22 @@ rencontrer des gens partageant leurs centres d'intérêt, puis à se retrouver l
 
 Projet pédagogique Holberton — **NestJS + Vue.js + PostgreSQL**.
 
-> **État : tâche 0 terminée.** Le cadrage, le modèle de données et les contrats d'API sont écrits ;
-> le socle technique démarre et une première route est consommée par un écran Vue. Les comptes, les
-> événements, la messagerie et la modération arrivent dans les tâches 1 à 4.
+> **État : MVP livré.** Comptes et profils modérés, découverte des membres, sorties avec inscription,
+> messagerie privée entre participants, back-office de modération, recherche de communes, pages vie
+> privée et mentions légales. Toutes les données de démonstration sont fictives.
+
+## Ce que permet l'application
+
+| Pour qui | Parcours |
+|---|---|
+| Visiteur | Accueil, centres d'intérêt, inscription, connexion, vie privée, mentions légales |
+| Membre (profil en attente) | Compléter son profil (ville via la recherche de communes, centres d'intérêt), consulter les sorties, relire ses conversations |
+| Membre approuvé | Découvrir les membres (filtres centre d'intérêt et département), s'inscrire à une sortie et s'en désinscrire, voir l'adresse exacte une fois inscrit, écrire aux participants d'une même sortie ou à l'organisateur |
+| Organisateur | Créer une sortie (brouillon), la modifier, la publier, l'annuler avec un motif, la clôturer ; retrouver toutes ses sorties dans « Mes sorties » |
+| Modérateur | Files des profils, des comptes et des sorties : approuver, bloquer, suspendre, réactiver, changer le rôle, annuler une sortie ; chaque décision est journalisée. Aucun accès aux messages |
+
+Les règles détaillées (statuts, visibilité, capacité, éligibilité des conversations) sont dans
+[docs/regles-metier.md](docs/regles-metier.md).
 
 ## Documentation
 
@@ -36,9 +49,13 @@ docker/  Script d'initialisation PostgreSQL (création de la base de test)
 ## Démarrage rapide (tout en conteneurs)
 
 ```bash
-cp .env.example .env
-docker compose up --build
+cp .env.example .env              # puis remplacer DATABASE_PASSWORD et JWT_SECRET
+docker compose up --build -d
+docker compose run --rm -e ALLOW_DEMO_SEED=true api npm run seed:prod   # données de démonstration
 ```
+
+Ouvrir ensuite <http://localhost:8080> et se connecter avec un
+[compte de démonstration](#données-de-démonstration-issues-7-et-30).
 
 | Service | URL | Remarque |
 |---|---|---|
@@ -181,15 +198,27 @@ lock régénéré.
 ## Tests
 
 ```bash
-cd api && npm test               # tests unitaires Jest
-docker compose up -d db           # requis pour les tests d'intégration PostgreSQL
-cd api && npm run test:integration # tests des règles d'événement sur re_tired_hearts_test
-cd web && npm test               # tests de composants Vitest
+cd api && npm test                  # tests unitaires Jest
+cd api && npm run test:issues       # tests de recette par issue (sans base de données)
+docker compose up -d db             # requis pour les deux commandes suivantes
+cd api && npm run test:integration  # règles d'événement, inscriptions, messagerie, seed (PostgreSQL)
+cd api && npm run test:e2e          # voir ci-dessous : variables à fournir
+cd web && npm test                  # tests de composants Vitest
+cd web && npm run build             # vérification des types (vue-tsc) puis compilation
 ```
 
-Résultats au moment de la livraison de la tâche 0 : **4 tests API** et **3 tests Vue** au vert. Les
-tests bout en bout de l'API (Supertest sur la base `re_tired_hearts_test`, créée automatiquement au
-premier démarrage de PostgreSQL) arrivent avec les routes authentifiées, en tâche 1.
+Résultats relevés le 22 octobre 2026 sur `main` (commit `50203c2`), avec PostgreSQL 16 :
+
+| Commande | Résultat |
+|---|---|
+| `api` — `npm test` | 10 fichiers, **50 tests** au vert |
+| `api` — `npm run test:issues` | 12 fichiers, **105 tests** au vert |
+| `api` — `npm run test:integration` | 5 fichiers, **38 tests** au vert |
+| `api` — `npm run test:e2e` | 5 fichiers, **72 tests** au vert |
+| `web` — `npm test` | 17 fichiers, **231 tests** au vert ; `npm run build` sans erreur |
+
+La même séance a vérifié la procédure du README : migrations, seed, rejeu du seed sans doublon,
+réinitialisation d'une base jetable puis nouveau seed.
 
 ### Tests bout en bout de l'API
 
@@ -217,27 +246,58 @@ celles qui manquent, sans jamais afficher leur valeur.
 | `DATABASE_USER` / `DATABASE_PASSWORD` / `DATABASE_NAME` | Connexion PostgreSQL | `rth` / — / `re_tired_hearts` |
 | `DATABASE_HOST` / `DATABASE_PORT` | Hôte et port vus depuis l'API | `localhost` / `5442` |
 | `DATABASE_LOGGING` | Affiche les requêtes SQL | `false` |
+| `NODE_ENV` | `development` ou `production` (cookie `Secure` en production) | `development` |
+| `JWT_SECRET` | Signature des jetons de session, **au moins 32 caractères aléatoires** | — (obligatoire) |
+| `TRUST_PROXY_HOPS` | Proxys de confiance devant l'API, pour la limitation de débit par adresse IP | `0` (`1` dans `.env.example`, pour nginx) |
 | `API_PORT`, `API_HOST_PORT` | Port de l'API et port publié | `3000` |
 | `WEB_HOST_PORT` | Port publié de l'interface | `8080` |
 | `SWAGGER_ENABLED` | Expose `/api/docs` | `true` |
 | `DEMO_PASSWORD` | Mot de passe des seuls comptes fictifs créés par `npm run seed` | `ReTiredDemo2026!` |
 | `ALLOW_DEMO_SEED` | Autorise explicitement ce script si `NODE_ENV=production` | non défini |
 
-## Ce que fait la tâche 0
+## Accessibilité et éco-conception
 
-- Les 9 entités du modèle sont déclarées et créées par une migration versionnée rejouable depuis une
-  base vide.
-- Deux routes publiques : `GET /api/health` et `GET /api/interests`.
-- Un écran Vue (l'accueil) consomme `GET /api/interests` et gère les quatre états : chargement, vide,
-  erreur avec bouton « Réessayer », succès.
-- Toutes les erreurs ont un format unique `{ statusCode, code, message }` ; aucune trace technique
-  n'est renvoyée au navigateur.
-- Les champs inconnus d'une requête sont rejetés (`forbidNonWhitelisted`), ce qui empêchera dès la
-  tâche 1 qu'un compte s'attribue un rôle.
+Le public a plus de 60 ans : l'interface vise le niveau AA du RGAA / WCAG.
+
+- **Lisibilité** : texte de base à 18 px, contrastes AA, cibles d'au moins 48 px, mise en page
+  vérifiée à 375 px de large sans défilement horizontal.
+- **Clavier et lecteurs d'écran** : lien d'évitement, libellés toujours visibles, erreurs à côté du
+  champ et en résumé, messages de résultat annoncés (`role="status"` / `alert`) et focus déplacé
+  après chaque action, statuts écrits en toutes lettres (la couleur n'est qu'un appui).
+- **Titres de page** : chaque route a un titre (« Mes sorties — Re-Tired Hearts ») ; les fiches
+  reprennent le nom du membre, de la sortie ou de la conversation. Un test vérifie qu'aucune route
+  n'en est dépourvue.
+- **Alternatives textuelles** : la seule image de contenu est la bannière de l'accueil, décorative
+  (`alt=""`) ; les ornements sont dessinés en CSS. Aucune information ne passe uniquement par une image.
+- **Poids des ressources** (compilation du 22 octobre 2026) :
+  - JavaScript commun : 114 Ko (44 Ko compressé) ; chaque écran est chargé à la demande (2 à 20 Ko) ;
+  - CSS : 19 Ko (4,4 Ko compressé) ;
+  - polices : 5 fichiers WOFF2 (183 Ko au total), sous-ensemble latin, servis par le site lui-même,
+    `font-display: swap` ;
+  - bannière de l'accueil : une seule image WebP téléchargée selon l'écran (69 Ko sur ordinateur
+    courant, 91 Ko sur téléphone, 109 Ko sur tablette, 156 Ko sur grand écran).
+- **Réseau** : aucun service tiers au chargement des pages (ni police externe, ni mesure d'audience) ;
+  nginx compresse les fichiers texte et met en cache longtemps les fichiers versionnés (`/assets/`).
 
 ## Limites connues
 
-- Pas encore d'authentification : les routes actuelles sont publiques et sans donnée personnelle.
-- Les comptes de démonstration existent ; événements, inscriptions et conversations de démonstration arrivent en tâche 5.
-- L'intégration de l'API de recherche de communes est spécifiée mais pas implémentée : tâche 5.
-- Pas de tests bout en bout tant qu'il n'y a pas de route protégée à vérifier.
+**Hors du MVP (traité à la main ou laissé de côté)**
+- Changement d'e-mail, suppression de compte et copie des données : pas d'écran, demandes traitées à la
+  main par l'équipe (voir la page « Vos données et votre vie privée »).
+- Pas de réinitialisation du mot de passe par e-mail, ni de notification.
+- Pas de temps réel dans la messagerie : bouton « Actualiser ».
+- Pas d'hébergement public : l'application tourne en local avec Docker pour la démonstration.
+
+**Comportements à connaître**
+- Les retours à la ligne d'un message sont remplacés par des espaces (nettoyage de l'API, R-MSG-6).
+- Les dates et heures sont affichées et saisies à l'heure de Paris, y compris pour l'outre-mer.
+- Le formulaire de sortie suppose une sortie sur une seule journée.
+- La liste des sorties se filtre par centre d'intérêt et département ; l'API accepte aussi la ville
+  (`cityName`, `cityCode`), que l'interface ne propose pas encore.
+- Les messages de validation détaillés renvoyés par l'API sont en anglais technique : l'écran les affiche
+  tels quels sous le champ concerné, en plus de son propre message en français.
+- `GET /api/me/organized-events` n'est pas paginé.
+- Rétrograder un organisateur laisse ses sorties publiées sans gestionnaire (R-MOD-5, question ouverte).
+- Le journal de modération est rempli mais n'a pas d'écran de consultation.
+- Les en-têtes de sécurité (CSP, etc.) sont posés par l'API (`helmet`) mais pas par le nginx qui sert
+  l'interface.
