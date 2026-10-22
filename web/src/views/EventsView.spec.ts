@@ -84,7 +84,10 @@ async function monter(chemin: string) {
       { path: '/connexion', name: 'connexion', component: vide },
       { path: '/mon-profil', name: 'mon-profil', component: vide },
       { path: '/membres/:userId', name: 'membre', component: vide },
+      { path: '/mes-sorties', name: 'mes-sorties', component: vide },
       { path: '/sorties', name: 'sorties', component: EventsView, meta: { connexionRequise: true } },
+      { path: '/sorties/nouvelle', name: 'nouvelle-sortie', component: vide },
+      { path: '/sorties/:eventId/modifier', name: 'modifier-sortie', component: vide },
       { path: '/sorties/:eventId', name: 'sortie', component: EventView, meta: { connexionRequise: true } },
     ],
   });
@@ -445,7 +448,7 @@ describe("détail d'une sortie", () => {
     expect(wrapper.find('.fiche a').exists()).toBe(false);
   });
 
-  it("organisateur : « Vous », pas de bouton, l'adresse exacte reste visible", async () => {
+  it("organisateur : « Vous », panneau de gestion au lieu de la participation, adresse visible", async () => {
     vi.mocked(sortiesApi.fetchEvent).mockResolvedValue(
       detail({
         isOrganizer: true,
@@ -458,8 +461,9 @@ describe("détail d'une sortie", () => {
 
     expect(fiche(wrapper.get('.fiche'))['Organisée par']).toBe('Vous');
     expect(wrapper.text()).toContain('2 allée Jules-Guesde');
-    expect(wrapper.get('.inscription-sortie').text()).toContain('Vous organisez cette sortie.');
-    expect(wrapper.find('.inscription-sortie button').exists()).toBe(false);
+    // Il ne peut pas s'inscrire à sa propre sortie : la participation laisse place à la gestion.
+    expect(wrapper.find('.inscription-sortie').exists()).toBe(false);
+    expect(wrapper.get('.gestion-sortie h3').text()).toBe('Gérer cette sortie');
   });
 
   it('le lien de retour ramène à la liste avec ses filtres', async () => {

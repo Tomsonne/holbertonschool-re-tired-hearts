@@ -31,6 +31,7 @@ async function monter() {
       { path: '/mon-profil', name: 'mon-profil', component: vide },
       { path: '/membres', name: 'membres', component: vide },
       { path: '/sorties', name: 'sorties', component: vide },
+      { path: '/mes-sorties', name: 'mes-sorties', component: vide },
     ],
   });
   await router.push('/page');
@@ -80,6 +81,22 @@ describe("zone de session de l'en-tête", () => {
     const { wrapper } = await monter();
 
     expect(wrapper.findAll('a').map((a) => a.text())).toEqual(['Les sorties', 'Mon profil']);
+  });
+
+  it('propose « Mes sorties » à un organisateur approuvé, pas à un organisateur en attente', async () => {
+    vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, role: 'organizer' });
+    const approuve = await monter();
+    expect(approuve.wrapper.findAll('a').map((a) => a.text())).toEqual([
+      'Les sorties',
+      'Mes sorties',
+      'Les membres',
+      'Mon profil',
+    ]);
+
+    setActivePinia(createPinia());
+    vi.mocked(authApi.fetchMe).mockResolvedValue({ ...membre, role: 'organizer', profileStatus: 'pending' });
+    const enAttente = await monter();
+    expect(enAttente.wrapper.findAll('a').map((a) => a.text())).toEqual(['Les sorties', 'Mon profil']);
   });
 
   it('ne propose ni les sorties ni les membres à un profil bloqué ou un compte suspendu', async () => {

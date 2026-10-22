@@ -5,17 +5,11 @@ import type { Page } from '../api/decouverte';
 import { ApiError } from '../api/http';
 import { fetchInterests, type Interest } from '../api/interests';
 import { fetchEvents, type EventSummary } from '../api/sorties';
+import CarteSortie from '../components/CarteSortie.vue';
 import SortiesInaccessibles from '../components/SortiesInaccessibles.vue';
 // Mêmes filtres et mêmes bornes que la découverte (EventFiltersDto : page ≤ 10 000).
 import { lireFiltres, versQuery } from '../router/filtresMembres';
-import {
-  DEPARTEMENT_VALIDE,
-  etatSortie,
-  formaterHoraire,
-  formaterLocalisation,
-  formaterPlaces,
-  LIBELLES_ETAT_SORTIE,
-} from '../formats';
+import { DEPARTEMENT_VALIDE } from '../formats';
 import { useSessionStore } from '../stores/session';
 
 // Liste des sorties (mission 16) : GET /api/events, sorties publiées et à venir.
@@ -266,34 +260,13 @@ async function effacerFiltres(): Promise<void> {
           </p>
 
           <ul class="liste-sorties">
-            <li v-for="sortie in resultats.items" :key="sortie.id" class="carte carte-sortie">
-              <h4 class="carte-sortie__titre">
-                <!-- Les filtres suivent dans l'adresse de la fiche, pour le lien de retour. -->
-                <RouterLink :to="{ name: 'sortie', params: { eventId: sortie.id }, query: versQuery(filtres) }">{{
-                  sortie.title
-                }}</RouterLink>
-              </h4>
-              <!-- Statut écrit en toutes lettres : la couleur du badge n'est qu'un appui. -->
-              <p class="badge" :class="`badge--${etatSortie(sortie)}`">{{ LIBELLES_ETAT_SORTIE[etatSortie(sortie)] }}</p>
-              <dl class="carte-sortie__infos">
-                <dt>Date</dt>
-                <dd>
-                  <time :datetime="sortie.startsAt">{{ formaterHoraire(sortie.startsAt, sortie.endsAt) }}</time>
-                </dd>
-                <dt>Lieu</dt>
-                <dd>{{ formaterLocalisation(sortie.location) }}</dd>
-                <dt>Organisée par</dt>
-                <dd>{{ sortie.organizer.displayName }}</dd>
-                <dt>Places</dt>
-                <dd>{{ formaterPlaces(sortie) }}</dd>
-              </dl>
-              <p class="carte-sortie__pied">
-                <span class="carte-sortie__theme">{{ sortie.interest.label }}</span>
-                <strong v-if="sortie.myRegistration === 'registered'" class="carte-sortie__inscrit">
-                  Vous êtes inscrit
-                </strong>
-              </p>
-            </li>
+            <!-- Les filtres suivent dans l'adresse de la fiche, pour le lien de retour. -->
+            <CarteSortie
+              v-for="sortie in resultats.items"
+              :key="sortie.id"
+              :sortie="sortie"
+              :lien="{ name: 'sortie', params: { eventId: sortie.id }, query: versQuery(filtres) }"
+            />
           </ul>
 
           <nav v-if="nombrePages > 1" class="pagination" aria-label="Pages de sorties">

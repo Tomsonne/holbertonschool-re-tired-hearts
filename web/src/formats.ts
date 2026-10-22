@@ -37,7 +37,8 @@ function heure(date: Date): string {
   const parties = formatHeure.formatToParts(date);
   const h = Number(parties.find((p) => p.type === 'hour')?.value);
   const m = parties.find((p) => p.type === 'minute')?.value ?? '00';
-  return m === '00' ? `${h} h` : `${h} h ${m}`;
+  // Espaces insécables : « 14 h 30 » ne doit jamais être coupé en fin de ligne.
+  return m === '00' ? `${h}\u00a0h` : `${h}\u00a0h\u00a0${m}`;
 }
 
 const majuscule = (texte: string) => texte.charAt(0).toUpperCase() + texte.slice(1);
@@ -55,16 +56,22 @@ export function formaterHoraire(debutIso: string, finIso: string): string {
 
 // Ce que le membre doit comprendre d'un coup d'œil. L'ordre compte : une sortie annulée
 // reste « annulée » même si elle était complète ; une sortie passée est « terminée ».
-export type EtatSortie = 'annulee' | 'terminee' | 'complete' | 'ouverte';
+export type EtatSortie = 'brouillon' | 'annulee' | 'terminee' | 'complete' | 'ouverte';
 
+// « brouillon » n'est visible que de son organisateur et des modérateurs.
 export function etatSortie(s: { status: string; isPast: boolean; availablePlaces: number }): EtatSortie {
+  if (s.status === 'draft') return 'brouillon';
   if (s.status === 'cancelled') return 'annulee';
   if (s.status === 'completed' || s.isPast) return 'terminee';
   if (s.availablePlaces <= 0) return 'complete';
   return 'ouverte';
 }
 
+// isPast devient vrai dès le DÉBUT de la sortie ; l'API n'autorise la clôture qu'après sa FIN.
+export const estFinie = (s: { endsAt: string }, maintenant = Date.now()) => new Date(s.endsAt).getTime() <= maintenant;
+
 export const LIBELLES_ETAT_SORTIE: Record<EtatSortie, string> = {
+  brouillon: 'Brouillon',
   annulee: 'Annulée',
   terminee: 'Terminée',
   complete: 'Complet',
@@ -76,4 +83,41 @@ export function formaterPlaces(s: { availablePlaces: number; capacity: number })
   if (s.availablePlaces <= 0) return `Aucune place restante sur ${s.capacity}`;
   const pluriel = s.availablePlaces > 1 ? 's' : '';
   return `${s.availablePlaces} place${pluriel} restante${pluriel} sur ${s.capacity}`;
+}
+
+// ---------- Saisie des dates d'une sortie (mission 17) ----------
+// Le formulaire se remplit à l'heure de Paris, comme l'affichage : « 14:30 » veut dire 14 h 30
+// à Paris, quel que soit le réglage de l'appareil. L'API reçoit et renvoie des dates ISO (UTC).
+const formatParties = new Intl.DateTimeFormat('en-CA', {
+  timeZone: FUSEAU, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+
+function partiesDe(instant: number): Record<string, string> {
+  return Object.fromEntries(formatParties.formatToParts(new Date(instant)).map((p) => [p.type, p.value]));
+}
+
+// ISO → { date: '2026-11-14', heure: '14:30' } à Paris, pour pré-remplir les champs.
+export function partiesParis(iso: string): { date: string; heure: string } | null {
+  const instant = new Date(iso).getTime();
+  if (Number.isNaN(instant)) return null;
+  const p = partiesDe(instant);
+  return { date: `${p.year}-${p.month}-${p.day}`, heure: `${p.hour}:${p.minute}` };
+}
+
+// '2026-11-14' + '14:30' (heure de Paris) → ISO. null si la date ou l'heure n'existe pas
+// (31 juin, ou heure sautée au passage à l'heure d'été).
+export function isoDepuisParis(date: string, heure: string): string | null {
+  const j = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const h = /^(\d{2}):(\d{2})$/.exec(heure);
+  if (!j || !h) return null;
+  const voulu = Date.UTC(+j[1], +j[2] - 1, +j[3], +h[1], +h[2]);
+  // Paris a 1 ou 2 h d'avance sur UTC selon la saison : on corrige deux fois, pour les jours
+  // de changement d'heure.
+  let instant = voulu;
+  for (let i = 0; i < 2; i += 1) {
+    const p = partiesDe(instant);
+    instant += voulu - Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+  }
+  const relu = partiesParis(new Date(instant).toISOString());
+  return relu?.date === date && relu.heure === heure ? new Date(instant).toISOString() : null;
 }
