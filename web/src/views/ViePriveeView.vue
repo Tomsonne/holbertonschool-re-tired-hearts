@@ -75,8 +75,14 @@
       <h3 id="titre-messages-vie-privee">4. Vos messages</h3>
       <ul>
         <li>
-          On ne peut vous écrire que si vous avez participé à une <strong>même sortie</strong>, ou si l'un de vous
-          organise une sortie à laquelle l'autre est inscrit.
+          <strong>Pour commencer une conversation</strong>, il faut être inscrits tous les deux à une même sortie, ou
+          que l'un de vous organise une sortie à laquelle l'autre est inscrit. Une inscription annulée ne permet pas
+          d'en commencer une.
+        </li>
+        <li>
+          <strong>Une fois commencée</strong>, la conversation peut continuer après la sortie, ou si l'un de vous
+          s'est désinscrit, tant que vos deux comptes restent actifs, vos profils vérifiés, et que vous acceptez tous
+          les deux les messages. Sinon, vous pouvez toujours relire la conversation, mais plus y écrire.
         </li>
         <li>
           Une conversation n'est lisible que par les <strong>deux personnes</strong> qui y participent.

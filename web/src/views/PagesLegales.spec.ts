@@ -82,6 +82,9 @@ describe('pages légales', () => {
     expect(texte('prive')).toContain('adresse e-mail');
     expect(texte('prive')).toContain('code postal');
     expect(texte('messages')).toContain('Les modérateurs ne peuvent pas lire vos messages.');
+    // R-MSG-1 et R-MSG-3 : commencer une conversation et la poursuivre n'obéissent pas aux mêmes règles.
+    expect(texte('messages')).toContain('Pour commencer une conversation, il faut être inscrits tous les deux');
+    expect(texte('messages')).toContain('Une fois commencée, la conversation peut continuer après la sortie');
     expect(texte('traitement')).toContain('2 heures');
     expect(wrapper.get('#choix a').attributes('href')).toBe('/mentions-legales');
   });
