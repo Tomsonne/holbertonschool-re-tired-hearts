@@ -1,6 +1,6 @@
 # Compte rendu QA — audit du frontend `web/`
 
-**Date :** 2026-10-22  
+**Date :** 2026-10-22
 **Périmètre :** réaudit statique de `web/`, à la lumière de `docs/architecture.md`, des règles métier, du contrat API et du périmètre MVP ; installation reproductible des dépendances et exécution Vitest/build.
 
 ## Synthèse

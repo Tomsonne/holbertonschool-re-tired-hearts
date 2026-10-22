@@ -1,6 +1,6 @@
 # Compte rendu QA — audit de l’API
 
-**Date :** 2026-10-22  
+**Date :** 2026-10-22
 **Périmètre :** audit statique de `api/`, avec lecture de l’architecture, des règles métier, du contrat API et du modèle de données.
 
 ## Synthèse
