@@ -32,6 +32,10 @@ const session = useSessionStore();
   <footer class="pied-site">
     <div class="contenu">
       <p>Re-Tired Hearts — projet pédagogique Happy Retired. Aucune donnée réelle.</p>
+      <nav class="pied-site__liens" aria-label="Informations légales">
+        <RouterLink :to="{ name: 'vie-privee' }">Vos données et votre vie privée</RouterLink>
+        <RouterLink :to="{ name: 'mentions-legales' }">Mentions légales</RouterLink>
+      </nav>
     </div>
   </footer>
 </template>

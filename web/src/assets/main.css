@@ -1396,6 +1396,76 @@ a.bouton {
   margin: 0;
 }
 
+.pied-site__liens {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem 1.5rem;
+  margin-top: 0.6rem;
+}
+
+/* Liens clairs sur fond vert : contraste AA, cible de 48 px de haut. */
+.pied-site__liens a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--papier);
+  font-weight: 700;
+}
+
+.pied-site__liens a:hover {
+  color: var(--blanc-casse);
+}
+
+.pied-site__liens a:focus-visible {
+  outline-color: var(--or-clair);
+}
+
+/* ---------- Pages de texte (vie privée, mentions légales) ---------- */
+.page-texte {
+  max-width: 46rem;
+  margin: 0 auto;
+}
+
+.page-texte__chapo {
+  font-size: 1.1rem;
+}
+
+.page-texte section {
+  margin-top: 2rem;
+  scroll-margin-top: 1rem;
+}
+
+.page-texte h3 {
+  margin-bottom: 0.6rem;
+}
+
+.page-texte ul,
+.page-texte ol {
+  padding-left: 1.4rem;
+}
+
+.page-texte li + li {
+  margin-top: 0.4rem;
+}
+
+.page-texte__sommaire {
+  margin: 1.5rem 0;
+}
+
+.page-texte__sommaire h3 {
+  margin-top: 0;
+}
+
+.page-texte__sommaire a {
+  display: inline-block;
+  padding: 0.35rem 0;
+}
+
+.formulaire__vie-privee {
+  margin-top: 1rem;
+}
+
 /* ---------- Tablette : bandeau plus haut (format 2,5:1), texte dans la zone crème ---------- */
 @media (min-width: 600px) and (max-width: 1099px) {
   .bandeau-accueil__texte {
