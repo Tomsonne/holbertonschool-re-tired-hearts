@@ -117,18 +117,40 @@ Avec Docker Compose, après `docker compose up --build` :
 docker compose run --rm -e ALLOW_DEMO_SEED=true api npm run seed:prod
 ```
 
-Le script crée quatre comptes fictifs avec le mot de passe **`ReTiredDemo2026!`** :
+Le script crée quinze comptes fictifs, tous avec le mot de passe **`ReTiredDemo2026!`** :
 
-| E-mail | Rôle | Profil |
-|---|---|---|
-| `moderateur@example.test` | modérateur | approuvé, masqué de la découverte |
-| `organisateur@example.test` | organisateur | approuvé |
-| `membre1@example.test` | membre | approuvé |
-| `membre2@example.test` | membre | approuvé |
+| E-mail | Rôle | Nom affiché | Ville | Profil |
+|---|---|---|---|---|
+| `moderateur@example.test` | modérateur | Modération démo | Lyon | approuvé, masqué de la découverte, messages fermés |
+| `organisateur@example.test` | organisateur | Organisateur démo | Lyon | approuvé |
+| `organisateur2@example.test` | organisateur | Claire B. | Villeurbanne | approuvé |
+| `organisateur3@example.test` | organisateur | Marcel D. | Caluire-et-Cuire | approuvé |
+| `membre1@example.test` | membre | Membre démo 1 | Villeurbanne | approuvé |
+| `membre2@example.test` | membre | Membre démo 2 | Lyon | approuvé |
+| `membre3@example.test` | membre | Hélène M. | Lyon | approuvé |
+| `membre4@example.test` | membre | Gérard P. | Vénissieux | approuvé |
+| `membre5@example.test` | membre | Josiane T. | Caluire-et-Cuire | approuvé |
+| `membre6@example.test` | membre | André L. | Bron | approuvé |
+| `membre7@example.test` | membre | Monique R. | Tassin-la-Demi-Lune | approuvé |
+| `membre8@example.test` | membre | Bernard C. | Sainte-Foy-lès-Lyon | approuvé |
+| `membre9@example.test` | membre | Christiane V. | Oullins | approuvé |
+| `membre10@example.test` | membre | Daniel F. | Saint-Priest | approuvé |
+| `membre11@example.test` | membre | Simone A. | Écully | approuvé |
 
-Il crée aussi deux sorties futures publiées, quatre inscriptions actives (deux membres par sortie)
-et deux conversations éligibles entre participants distincts. Tous les noms, lieux, adresses et
-e-mails sont fictifs ; aucun message personnel n'est créé. Les sorties ont des identifiants stables.
+Il crée aussi **dix sorties futures publiées** portées par les trois organisateurs, réparties sur
+cinq communes (Lyon, Villeurbanne, Caluire-et-Cuire, Vénissieux, Bron) et neuf centres d'intérêt
+(marche, cuisine, musées, cinéma, pétanque, jeux de société, gym douce, langues, jardinage), avec
+**33 inscriptions actives** sur 105 places et **huit conversations** éligibles entre participants
+distincts. Les deux premières sorties arrivent dans 7 et 12 jours, la dernière dans 40.
+
+Toute la démonstration se tient dans le département **69**, sur dix communes de la métropole : les
+filtres par département, par ville et par centre d'intérêt renvoient donc des résultats dès le
+premier écran. `membre11@example.test` n'est inscrit à aucune sortie, pour montrer une page
+« mes inscriptions » vide ; `moderateur@example.test` reste hors de la découverte et de la
+messagerie. La localisation est une saisie manuelle (R-LOC-3) : aucun code INSEE n'est inventé,
+donc `cityCode` est `null` et `locationVerified` vaut `false` partout. Tous les noms, e-mails et
+adresses exactes sont fictifs ; seuls les repères publics (`areaHint`) citent des lieux réels.
+Aucun message personnel n'est créé. Les sorties ont des identifiants stables.
 
 Ces identifiants sont publics et réservés à une base de démonstration. Le mot de passe peut être
 remplacé via `DEMO_PASSWORD` (12 à 128 caractères). Le script refuse de s'exécuter avec

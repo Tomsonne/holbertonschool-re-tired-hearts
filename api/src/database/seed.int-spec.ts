@@ -10,11 +10,11 @@ import { ProfileInterest } from '../profiles/profile-interest.entity';
 import { Profile, ProfileStatus } from '../profiles/profile.entity';
 import { AccountStatus, User, UserRole } from '../users/user.entity';
 import { buildDataSourceOptions } from './typeorm.config';
-import { DEMO_ACCOUNTS, DEMO_EVENTS, seedDemoData } from './seed';
+import { DEMO_ACCOUNTS, DEMO_CONVERSATIONS, DEMO_EVENTS, seedDemoData } from './seed';
 
 const { Client } = require('pg');
 config({ path: ['.env', '../.env'] });
-jest.setTimeout(30000);
+jest.setTimeout(60000);
 
 describe('seed complet (PostgreSQL jetable)', () => {
   let admin: InstanceType<typeof Client>;
@@ -22,6 +22,9 @@ describe('seed complet (PostgreSQL jetable)', () => {
   let name: string;
   let gate: InstanceType<typeof Client> | null = null;
   const password = 'MotDePasseDemo2026!';
+  // Les tests de concurrence jouent sur la première sortie : ses places et ses inscrits attendus
+  // viennent des données, pour qu'un ajout dans DEMO_EVENTS ne les transforme pas en valeurs mortes.
+  const firstEvent = DEMO_EVENTS[0];
 
   beforeEach(async () => {
     if (!process.env.DATABASE_PASSWORD) throw new Error('DATABASE_PASSWORD requis pour le test PostgreSQL jetable.');
@@ -68,30 +71,35 @@ describe('seed complet (PostgreSQL jetable)', () => {
       expect(user.status).toBe(AccountStatus.Active);
       expect(profile.status).toBe(ProfileStatus.Approved);
       expect(profile.reviewedAt).not.toBeNull();
+      expect(profile.departmentCode).toBe('69');
     }
-    const organizer = users.get(DEMO_ACCOUNTS[1].email)!;
-    const members = [users.get(DEMO_ACCOUNTS[2].email)!, users.get(DEMO_ACCOUNTS[3].email)!];
     for (const definition of DEMO_EVENTS) {
       const event = await db.manager.findOneByOrFail(Event, { id: definition.id });
-      expect(event.organizerId).toBe(organizer.id);
+      expect(event.organizerId).toBe(users.get(definition.organizerEmail)!.id);
       expect(event.status).toBe(EventStatus.Published);
       expect(event.capacity).toBe(definition.capacity);
+      expect(event.startsAt.getTime()).toBeGreaterThan(Date.now());
+      const expectedIds = definition.attendeeEmails.map((email) => users.get(email)!.id);
       const registrations = await db.manager.findBy(EventRegistration, { eventId: event.id });
-      expect(registrations).toHaveLength(2);
+      expect(registrations).toHaveLength(expectedIds.length);
       expect(registrations.every((registration) => registration.status === RegistrationStatus.Registered)).toBe(true);
-      expect(registrations.map((registration) => registration.userId).sort()).toEqual(members.map((member) => member.id).sort());
+      expect(registrations.map((registration) => registration.userId).sort()).toEqual([...expectedIds].sort());
       expect(registrations.length).toBeLessThanOrEqual(event.capacity);
+      // R-EVT-3 : l'organisateur ne compte pas dans la capacité et ne s'inscrit pas.
+      expect(expectedIds).not.toContain(event.organizerId);
     }
     const conversations = await db.manager.find(Conversation);
-    expect(conversations).toHaveLength(2);
-    for (const conversation of conversations) {
+    expect(conversations).toHaveLength(DEMO_CONVERSATIONS.length);
+    for (const definition of DEMO_CONVERSATIONS) {
+      const [participantAId, participantBId] = definition.participantEmails
+        .map((email) => users.get(email)!.id).sort();
+      const conversation = await db.manager.findOneByOrFail(Conversation, { participantAId, participantBId });
       expect(conversation.participantAId < conversation.participantBId).toBe(true);
-      expect(conversation.contextEventId).toBe(DEMO_EVENTS[0].id);
-      const participants = [conversation.participantAId, conversation.participantBId];
-      expect(participants.every((id) => id === organizer.id || members.some((member) => member.id === id))).toBe(true);
-      for (const id of participants.filter((id) => id !== organizer.id)) {
+      expect(conversation.contextEventId).toBe(definition.contextEventId);
+      const context = DEMO_EVENTS.find((candidate) => candidate.id === definition.contextEventId)!;
+      for (const email of definition.participantEmails.filter((email) => email !== context.organizerEmail)) {
         expect(await db.manager.findOneBy(EventRegistration, {
-          eventId: DEMO_EVENTS[0].id, userId: id, status: RegistrationStatus.Registered,
+          eventId: context.id, userId: users.get(email)!.id, status: RegistrationStatus.Registered,
         })).not.toBeNull();
       }
     }
@@ -101,9 +109,9 @@ describe('seed complet (PostgreSQL jetable)', () => {
     await seedDemoData(db, password);
     await db.createQueryBuilder().delete().from(Conversation).execute();
     const users = await demoUsers();
-    const demoMembers = [users.get(DEMO_ACCOUNTS[2].email)!, users.get(DEMO_ACCOUNTS[3].email)!];
+    const demoMembers = firstEvent.attendeeEmails.map((email) => users.get(email)!);
     for (const member of demoMembers) {
-      await db.manager.delete(EventRegistration, { eventId: DEMO_EVENTS[0].id, userId: member.id });
+      await db.manager.delete(EventRegistration, { eventId: firstEvent.id, userId: member.id });
     }
     const foreignIds: string[] = [];
     for (let index = 0; index < occupied; index++) {
@@ -117,7 +125,7 @@ describe('seed complet (PostgreSQL jetable)', () => {
         departmentCode: '69', status: ProfileStatus.Approved,
       }));
       await db.manager.save(db.manager.create(EventRegistration, {
-        eventId: DEMO_EVENTS[0].id, userId: foreign.id, status: RegistrationStatus.Registered,
+        eventId: firstEvent.id, userId: foreign.id, status: RegistrationStatus.Registered,
       }));
     }
     return { demoMembers, foreignIds };
@@ -136,15 +144,16 @@ describe('seed complet (PostgreSQL jetable)', () => {
   }
 
   async function demoEvent(organizerId: string, overrides: Partial<Event> = {}): Promise<Event> {
-    const interest = await db.manager.findOneByOrFail(Interest, { slug: DEMO_EVENTS[0].interestSlug });
-    const startsAt = new Date(Date.now() + DEMO_EVENTS[0].daysFromNow * 86400000);
+    const interest = await db.manager.findOneByOrFail(Interest, { slug: firstEvent.interestSlug });
+    const startsAt = new Date(Date.now() + firstEvent.daysFromNow * 86400000);
     return db.manager.save(db.manager.create(Event, {
-      id: DEMO_EVENTS[0].id, organizerId, interestId: interest.id,
-      title: DEMO_EVENTS[0].title,
+      id: firstEvent.id, organizerId, interestId: interest.id,
+      title: firstEvent.title,
       description: 'Sortie entièrement fictive pour explorer la démonstration.',
-      startsAt, endsAt: new Date(startsAt.getTime() + 7200000),
-      cityName: 'Lyon', departmentCode: '69', postalCode: '69000',
-      exactAddress: '1 rue Imaginaire, 69000 Lyon', capacity: DEMO_EVENTS[0].capacity,
+      startsAt, endsAt: new Date(startsAt.getTime() + firstEvent.durationHours * 3600000),
+      cityName: firstEvent.cityName, departmentCode: firstEvent.departmentCode,
+      postalCode: firstEvent.postalCode, areaHint: firstEvent.areaHint,
+      exactAddress: firstEvent.exactAddress, capacity: firstEvent.capacity,
       status: EventStatus.Published, publishedAt: new Date(), ...overrides,
     }));
   }
@@ -179,8 +188,8 @@ describe('seed complet (PostgreSQL jetable)', () => {
   });
 
   it('ne conserve aucun compte créé quand la capacité manque au premier passage', async () => {
-    // Seul l'organisateur de démonstration préexiste, avec sa sortie déjà complète : le
-    // seed crée les trois autres comptes avant de buter sur les places.
+    // Seul l'organisateur de la première sortie préexiste, avec sa sortie déjà complète : le
+    // seed crée tous les autres comptes avant de buter sur les places.
     const organizer = await db.manager.save(db.manager.create(User, {
       email: DEMO_ACCOUNTS[1].email, passwordHash: 'integration-test-only',
       role: UserRole.Organizer, status: AccountStatus.Active,
@@ -191,22 +200,24 @@ describe('seed complet (PostgreSQL jetable)', () => {
       allowMessages: true, status: ProfileStatus.Approved, reviewedAt: new Date(),
     }));
     await demoEvent(organizer.id);
-    for (let index = 0; index < DEMO_EVENTS[0].capacity; index++) {
+    for (let index = 0; index < firstEvent.capacity; index++) {
       await db.manager.save(db.manager.create(EventRegistration, {
-        eventId: DEMO_EVENTS[0].id, userId: await foreignMember(),
+        eventId: firstEvent.id, userId: await foreignMember(),
         status: RegistrationStatus.Registered,
       }));
     }
 
     await expect(seedDemoData(db, password)).rejects.toThrow('places insuffisantes');
-    const seeded = [DEMO_ACCOUNTS[0], DEMO_ACCOUNTS[2], DEMO_ACCOUNTS[3]].map((account) => account.email);
+    const seeded = DEMO_ACCOUNTS
+      .filter((account) => account.email !== DEMO_ACCOUNTS[1].email)
+      .map((account) => account.email);
     await expectRolledBack(seeded, {
-      users: 1 + DEMO_EVENTS[0].capacity, profiles: 1 + DEMO_EVENTS[0].capacity,
-      events: 1, registrations: DEMO_EVENTS[0].capacity,
+      users: 1 + firstEvent.capacity, profiles: 1 + firstEvent.capacity,
+      events: 1, registrations: firstEvent.capacity,
     });
     // L'organisateur préexistant garde son compte et sa sortie.
     expect(await db.manager.findOneByOrFail(User, { email: DEMO_ACCOUNTS[1].email })).toMatchObject({ id: organizer.id });
-    expect(await db.manager.findOneByOrFail(Event, { id: DEMO_EVENTS[0].id })).toMatchObject({ organizerId: organizer.id });
+    expect(await db.manager.findOneByOrFail(Event, { id: firstEvent.id })).toMatchObject({ organizerId: organizer.id });
   });
 
   it('crée des relations valides au premier passage', async () => {
@@ -235,8 +246,8 @@ describe('seed complet (PostgreSQL jetable)', () => {
   it.each([3, 2])('refuse une sortie avec %i inscrits actifs et des places insuffisantes', async (occupied) => {
     const { demoMembers, foreignIds } = await occupyFirstEvent(occupied);
     await expect(seedDemoData(db, password)).rejects.toThrow('places insuffisantes');
-    const event = await db.manager.findOneByOrFail(Event, { id: DEMO_EVENTS[0].id });
-    expect(event.capacity).toBe(3);
+    const event = await db.manager.findOneByOrFail(Event, { id: firstEvent.id });
+    expect(event.capacity).toBe(firstEvent.capacity);
     const registrations = await db.manager.findBy(EventRegistration, { eventId: event.id });
     expect(registrations).toHaveLength(occupied);
     expect(registrations.every((row) => row.status === RegistrationStatus.Registered)).toBe(true);
@@ -248,16 +259,18 @@ describe('seed complet (PostgreSQL jetable)', () => {
   it('ignore les lignes withdrawn dans le calcul des places', async () => {
     const { foreignIds } = await occupyFirstEvent(2);
     const withdrawn = await db.manager.findOneByOrFail(EventRegistration, {
-      eventId: DEMO_EVENTS[0].id, userId: foreignIds[0],
+      eventId: firstEvent.id, userId: foreignIds[0],
     });
     withdrawn.status = RegistrationStatus.Withdrawn;
     withdrawn.withdrawnAt = new Date();
     await db.manager.save(withdrawn);
     await seedDemoData(db, password);
-    const registrations = await db.manager.findBy(EventRegistration, { eventId: DEMO_EVENTS[0].id });
-    expect(registrations.filter((row) => row.status === RegistrationStatus.Registered)).toHaveLength(3);
+    const registrations = await db.manager.findBy(EventRegistration, { eventId: firstEvent.id });
+    // L'inscription retirée libère sa place : le seed replace ses inscrits derrière le tiers restant.
+    expect(registrations.filter((row) => row.status === RegistrationStatus.Registered))
+      .toHaveLength(1 + firstEvent.attendeeEmails.length);
     expect(registrations.find((row) => row.id === withdrawn.id)?.status).toBe(RegistrationStatus.Withdrawn);
-    expect(await db.manager.count(Conversation)).toBe(2);
+    expect(await db.manager.count(Conversation)).toBe(DEMO_CONVERSATIONS.length);
   });
 
   // Une seule place libre sur la première sortie : le seed en réclame deux, l'inscription
@@ -304,7 +317,7 @@ describe('seed complet (PostgreSQL jetable)', () => {
     });
     await gate.connect();
     await gate.query('BEGIN');
-    await gate.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [DEMO_EVENTS[0].id]);
+    await gate.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [firstEvent.id]);
   }
 
   async function releaseEventLock(): Promise<void> {
@@ -339,25 +352,25 @@ describe('seed complet (PostgreSQL jetable)', () => {
   ): Promise<void> {
     expect(seed).toEqual({ ok: true, value: [] });
     expect(rejection(registration)).toMatchObject({ response: { code: 'EVENT_FULL' } });
-    const event = await db.manager.findOneByOrFail(Event, { id: DEMO_EVENTS[0].id });
-    expect(event.capacity).toBe(3);
+    const event = await db.manager.findOneByOrFail(Event, { id: firstEvent.id });
+    expect(event.capacity).toBe(firstEvent.capacity);
     const registered = await db.manager.findBy(EventRegistration, {
-      eventId: DEMO_EVENTS[0].id, status: RegistrationStatus.Registered,
+      eventId: firstEvent.id, status: RegistrationStatus.Registered,
     });
-    expect(registered).toHaveLength(3);
+    expect(registered).toHaveLength(firstEvent.capacity);
     expect(registered.length).toBeLessThanOrEqual(event.capacity);
     expect(registered.map((row) => row.userId).sort()).toEqual(
       [...contenders.foreignIds, ...contenders.demoMembers.map((member) => member.id)].sort(),
     );
     // Le membre concurrent n'a aucune ligne, pas même une ligne retirée.
     expect(await db.manager.countBy(EventRegistration, {
-      eventId: DEMO_EVENTS[0].id, userId: contenders.other.id,
+      eventId: firstEvent.id, userId: contenders.other.id,
     })).toBe(0);
-    // Les deux membres inscrits rendent les deux conversations de démonstration éligibles.
-    expect(await db.manager.count(Conversation)).toBe(2);
+    // Les inscrits replacés rendent à nouveau éligibles toutes les conversations du jeu.
+    expect(await db.manager.count(Conversation)).toBe(DEMO_CONVERSATIONS.length);
     expect(await db.manager.countBy(EventRegistration, {
       eventId: DEMO_EVENTS[1].id, status: RegistrationStatus.Registered,
-    })).toBe(2);
+    })).toBe(DEMO_EVENTS[1].attendeeEmails.length);
   }
 
   // L'inscription ordinaire a gagné : le seed refuse ses deux ajouts faute de place et ne
@@ -371,27 +384,27 @@ describe('seed complet (PostgreSQL jetable)', () => {
       ok: true, value: { status: RegistrationStatus.Registered, availablePlaces: 1 },
     });
     expect(rejection(seed)).toMatchObject({ message: expect.stringContaining('places insuffisantes') });
-    const event = await db.manager.findOneByOrFail(Event, { id: DEMO_EVENTS[0].id });
-    expect(event.capacity).toBe(3);
+    const event = await db.manager.findOneByOrFail(Event, { id: firstEvent.id });
+    expect(event.capacity).toBe(firstEvent.capacity);
     const registered = await db.manager.findBy(EventRegistration, {
-      eventId: DEMO_EVENTS[0].id, status: RegistrationStatus.Registered,
+      eventId: firstEvent.id, status: RegistrationStatus.Registered,
     });
     expect(registered).toHaveLength(2);
     expect(registered.length).toBeLessThanOrEqual(event.capacity);
     expect(registered.map((row) => row.userId).sort()).toEqual(
       [...contenders.foreignIds, contenders.other.id].sort(),
     );
-    // Aucune inscription partielle : ni l'un ni l'autre des deux membres de démonstration.
+    // Aucune inscription partielle : aucun des inscrits attendus sur la première sortie.
     for (const member of contenders.demoMembers) {
       expect(await db.manager.countBy(EventRegistration, {
-        eventId: DEMO_EVENTS[0].id, userId: member.id,
+        eventId: firstEvent.id, userId: member.id,
       })).toBe(0);
     }
-    // Le seed s'arrête avant les conversations et ne touche pas la seconde sortie.
+    // Le seed s'arrête avant les conversations et ne touche pas les sorties suivantes.
     expect(await db.manager.count(Conversation)).toBe(0);
     expect(await db.manager.countBy(EventRegistration, {
       eventId: DEMO_EVENTS[1].id, status: RegistrationStatus.Registered,
-    })).toBe(2);
+    })).toBe(DEMO_EVENTS[1].attendeeEmails.length);
   }
 
   it('complète la sortie quand le seed obtient le verrou avant l’inscription ordinaire', async () => {
@@ -399,7 +412,7 @@ describe('seed complet (PostgreSQL jetable)', () => {
     await holdEventLock();
     const seed = settle(seedDemoData(db, password));
     await waitForLockWaiters(1);
-    const registration = settle(new RegistrationsService(db).register(contenders.other.id, DEMO_EVENTS[0].id));
+    const registration = settle(new RegistrationsService(db).register(contenders.other.id, firstEvent.id));
     await waitForLockWaiters(2);
     await releaseEventLock();
     await expectSeedWon(contenders, await seed, await registration);
@@ -408,7 +421,7 @@ describe('seed complet (PostgreSQL jetable)', () => {
   it('refuse les deux ajouts du seed quand l’inscription ordinaire obtient le verrou avant lui', async () => {
     const contenders = await prepareContender();
     await holdEventLock();
-    const registration = settle(new RegistrationsService(db).register(contenders.other.id, DEMO_EVENTS[0].id));
+    const registration = settle(new RegistrationsService(db).register(contenders.other.id, firstEvent.id));
     await waitForLockWaiters(1);
     const seed = settle(seedDemoData(db, password));
     await waitForLockWaiters(2);
@@ -419,7 +432,7 @@ describe('seed complet (PostgreSQL jetable)', () => {
   it('partage le verrou de sortie avec une inscription ordinaire concurrente', async () => {
     const contenders = await prepareContender();
     const seed = settle(seedDemoData(db, password));
-    const registration = settle(new RegistrationsService(db).register(contenders.other.id, DEMO_EVENTS[0].id));
+    const registration = settle(new RegistrationsService(db).register(contenders.other.id, firstEvent.id));
     const [seedOutcome, registrationOutcome] = await Promise.all([seed, registration]);
     expect([seedOutcome, registrationOutcome].filter((outcome) => outcome.ok)).toHaveLength(1);
     // L'ordre réel n'est pas imposé ici : chaque issue est vérifiée en entier selon le gagnant.
@@ -430,8 +443,10 @@ describe('seed complet (PostgreSQL jetable)', () => {
   it('ne réactive pas une inscription retirée et ne recrée pas une conversation inéligible', async () => {
     await seedDemoData(db, password);
     const users = await demoUsers();
+    const quitter = firstEvent.attendeeEmails[0];
+    const quitterId = users.get(quitter)!.id;
     const withdrawn = await db.manager.findOneByOrFail(EventRegistration, {
-      eventId: DEMO_EVENTS[0].id, userId: users.get(DEMO_ACCOUNTS[2].email)!.id,
+      eventId: firstEvent.id, userId: quitterId,
     });
     await db.createQueryBuilder().delete().from(Conversation).execute();
     withdrawn.status = RegistrationStatus.Withdrawn;
@@ -439,6 +454,12 @@ describe('seed complet (PostgreSQL jetable)', () => {
     await db.manager.save(withdrawn);
     await seedDemoData(db, password);
     expect((await db.manager.findOneByOrFail(EventRegistration, { id: withdrawn.id })).status).toBe(RegistrationStatus.Withdrawn);
-    expect(await db.manager.count(Conversation)).toBe(0);
+    // Les conversations qui tenaient à cette inscription ne reviennent pas ; les autres, oui.
+    const orphaned = DEMO_CONVERSATIONS.filter((conversation) =>
+      (conversation.participantEmails as readonly string[]).includes(quitter));
+    expect(orphaned.length).toBeGreaterThan(0);
+    expect(await db.manager.countBy(Conversation, { participantAId: quitterId })).toBe(0);
+    expect(await db.manager.countBy(Conversation, { participantBId: quitterId })).toBe(0);
+    expect(await db.manager.count(Conversation)).toBe(DEMO_CONVERSATIONS.length - orphaned.length);
   });
 });
