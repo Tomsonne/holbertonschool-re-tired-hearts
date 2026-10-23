@@ -621,6 +621,15 @@ async function isRegistered(manager: EntityManager, eventId: string, userId: str
   return registration?.status === RegistrationStatus.Registered;
 }
 
+// R-MSG-1 : démarrer une conversation suppose le consentement actuel des deux profils, et non
+// celui déclaré dans DEMO_ACCOUNTS. Le réglage se change depuis l'écran de profil : un membre qui
+// a fermé ses messages depuis le dernier passage fait sauter sa paire, sans faire échouer le seed.
+// Une conversation déjà créée n'est jamais supprimée pour autant (R-MSG-3) ; seul l'envoi est refusé.
+async function acceptsMessages(manager: EntityManager, userId: string): Promise<boolean> {
+  const profile = await manager.findOneBy(Profile, { userId });
+  return profile?.allowMessages === true;
+}
+
 async function seedEvent(
   manager: EntityManager,
   definition: DemoEvent,
@@ -701,8 +710,11 @@ async function seedDemoGraph(manager: EntityManager): Promise<void> {
     if (!openEventIds.has(definition.contextEventId)) continue;
     const organizerEmail = events.get(definition.contextEventId)!.organizerEmail;
     const participants = definition.participantEmails.map((email) => users.get(email)!);
-    const eligible = await Promise.all(definition.participantEmails.map(async (email) =>
-      email === organizerEmail || await isRegistered(manager, definition.contextEventId, users.get(email)!.id)));
+    const eligible = await Promise.all(definition.participantEmails.map(async (email) => {
+      const user = users.get(email)!;
+      if (!await acceptsMessages(manager, user.id)) return false;
+      return email === organizerEmail || await isRegistered(manager, definition.contextEventId, user.id);
+    }));
     if (!eligible.every(Boolean)) continue;
     const [participantAId, participantBId] = participants.map((user) => user.id).sort();
     if (await manager.findOneBy(Conversation, { participantAId, participantBId })) continue;
@@ -739,9 +751,11 @@ async function main(): Promise<void> {
     const password = process.env.DEMO_PASSWORD ?? 'ReTiredDemo2026!';
     const created = await seedDemoData(dataSource, password);
     // Aucun mot de passe ni hachage dans les journaux.
+    // Les sorties et les conversations sont celles que le jeu décrit : une paire devenue
+    // inéligible est ignorée, donc ce total ne dit pas combien de lignes ont été créées.
     process.stdout.write(
       `Comptes de démonstration créés : ${created.length}/${DEMO_ACCOUNTS.length}. ` +
-      `Sorties : ${DEMO_EVENTS.length}, conversations : ${DEMO_CONVERSATIONS.length}.\n`,
+      `Jeu décrit : ${DEMO_EVENTS.length} sorties, ${DEMO_CONVERSATIONS.length} conversations.\n`,
     );
   } finally {
     await dataSource.destroy();

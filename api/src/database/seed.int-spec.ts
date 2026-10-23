@@ -462,4 +462,32 @@ describe('seed complet (PostgreSQL jetable)', () => {
     expect(await db.manager.countBy(Conversation, { participantBId: quitterId })).toBe(0);
     expect(await db.manager.count(Conversation)).toBe(DEMO_CONVERSATIONS.length - orphaned.length);
   });
+
+  // R-MSG-1 : le consentement aux messages se change depuis l'écran de profil. Le seed lit l'état
+  // réel de la base, et non le réglage déclaré dans DEMO_ACCOUNTS.
+  it('ne démarre pas de conversation avec un profil qui a fermé ses messages', async () => {
+    await seedDemoData(db, password);
+    const users = await demoUsers();
+    const silent = DEMO_CONVERSATIONS[0].participantEmails[1];
+    const silentId = users.get(silent)!.id;
+    const closed = DEMO_CONVERSATIONS.filter((conversation) =>
+      (conversation.participantEmails as readonly string[]).includes(silent));
+    expect(closed.length).toBeGreaterThan(0);
+    await db.manager.update(Profile, { userId: silentId }, { allowMessages: false });
+
+    // R-MSG-3 : une conversation déjà ouverte continue d'exister ; seul l'envoi sera refusé.
+    await seedDemoData(db, password);
+    expect(await db.manager.count(Conversation)).toBe(DEMO_CONVERSATIONS.length);
+
+    // Sur une messagerie repartie de zéro, la paire est sautée et les autres sont bien créées.
+    await db.createQueryBuilder().delete().from(Conversation).execute();
+    await seedDemoData(db, password);
+    expect(await db.manager.countBy(Conversation, { participantAId: silentId })).toBe(0);
+    expect(await db.manager.countBy(Conversation, { participantBId: silentId })).toBe(0);
+    expect(await db.manager.count(Conversation)).toBe(DEMO_CONVERSATIONS.length - closed.length);
+    // Le reste du graphe est intact : le seed n'a pas échoué pour autant.
+    expect(await db.manager.count(User)).toBe(DEMO_ACCOUNTS.length);
+    expect(await db.manager.countBy(EventRegistration, { status: RegistrationStatus.Registered }))
+      .toBe(DEMO_EVENTS.reduce((total, event) => total + event.attendeeEmails.length, 0));
+  });
 });
