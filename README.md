@@ -5,6 +5,12 @@ rencontrer des gens partageant leurs centres d'intérêt, puis à se retrouver l
 
 Projet pédagogique Holberton — **NestJS + Vue.js + PostgreSQL**.
 
+![NestJS 11](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white)
+![Vue 3.5](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs&logoColor=white)
+![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
+![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
+![Docker Compose v2](https://img.shields.io/badge/Docker%20Compose-v2-2496ED?logo=docker&logoColor=white)
+
 > **État : MVP livré.** Comptes et profils modérés, découverte des membres, sorties avec inscription,
 > messagerie privée entre participants, back-office de modération, recherche de communes, pages vie
 > privée et mentions légales. Toutes les données de démonstration sont fictives.
@@ -37,6 +43,63 @@ routes sensibles sont limitées en débit. Le navigateur ne se connecte jamais d
 seule l'API appelle le service externe de recherche de communes, avec un délai maximal de trois secondes
 et une saisie manuelle de secours en cas d'indisponibilité.
 
+## Mécanismes implémentés
+
+Les parcours ci-dessus reposent sur quelques mécanismes qu'un relecteur voudra regarder de près.
+Les règles citées (`R-…`) sont détaillées dans [docs/regles-metier.md](docs/regles-metier.md), les
+codes d'erreur dans [docs/contrats-api.md](docs/contrats-api.md).
+
+**Sorties — cycle de vie et propriété** (`api/src/events/events.service.ts`)
+`draft` → `published` → `cancelled` ou `completed`. Chaque transition est vérifiée côté serveur et
+refusée par `409 INVALID_EVENT_TRANSITION` quand elle n'a pas de sens : publier autre chose qu'un
+brouillon, annuler ce qui n'est pas publié, clôturer avant la fin de la sortie
+(`409 EVENT_NOT_FINISHED`). Seul un brouillon sans inscription est supprimable
+(`409 EVENT_NOT_DELETABLE`), une sortie publiée doit rester à venir (`409 EVENT_IN_PAST`), et la
+date, le lieu et le centre d'intérêt se figent dès la première inscription
+(`409 EVENT_HAS_REGISTRATIONS`). La propriété est relue en base à chaque écriture : avoir le rôle
+d'organisateur ne suffit pas, il faut être celui de *cette* sortie (`403 NOT_EVENT_OWNER`).
+
+**Inscriptions — capacité tenue sous concurrence** (`api/src/events/registrations.service.ts`)
+Une inscription prend un verrou d'écriture sur la ligne de la sortie (`SELECT … FOR UPDATE`,
+`api/src/events/lock-event.ts`) **avant** de compter les places, dans une transaction
+`READ COMMITTED`. Deux demandes simultanées sur la dernière place sont donc servies l'une après
+l'autre : la seconde reçoit `409 EVENT_FULL` et aucune ligne n'est écrite. Le même verrou protège la
+baisse de capacité par l'organisateur (`409 CAPACITY_BELOW_REGISTRATIONS`) et le script de seed. Une
+désinscription repasse la ligne en `withdrawn` plutôt que de la supprimer, ce qui libère la place et
+garde la trace ; une réinscription réutilise la même ligne.
+
+**Adresse exacte et participants** (R-LOC-4)
+L'adresse exacte n'est renvoyée qu'à l'organisateur, aux inscrits et aux modérateurs ; pour tous les
+autres le champ vaut `null` et la fiche ne montre qu'un repère public, la ville et le département.
+Les réponses sont construites par liste blanche de champs, jamais par recopie de l'entité, pour
+qu'aucun code postal ou code INSEE ne fuite par inadvertance.
+
+**Messagerie — éligibilité, confidentialité, pagination** (`api/src/messaging/`)
+Démarrer une conversation exige une **sortie commune** : les deux `registered` au même événement, ou
+l'un inscrit à l'événement organisé par l'autre (R-MSG-1). La vérification tient en une requête SQL ;
+sans sortie commune, `403 NOT_ELIGIBLE`. S'y ajoutent les deux comptes actifs, les deux profils
+approuvés et le consentement des deux (`409 MESSAGING_DISABLED`) ; une inscription retirée ne donne
+aucun droit de contact. La paire est stockée ordonnée (`participant_a_id < participant_b_id`) avec une
+contrainte unique, donc (A, B) et (B, A) sont la même conversation. La confidentialité est tenue par
+une garde qui s'exécute **avant** les pipes de validation Nest : un tiers reçoit
+`404 CONVERSATION_NOT_FOUND` sans que le corps de son message soit même analysé, et un modérateur n'y
+a pas plus accès qu'un autre (R-MSG-4). L'historique est paginé par curseur `(created_at, id)` ; un
+curseur étranger à la conversation est refusé en `400` au lieu de renvoyer une page vide.
+
+**Recherche de communes — service externe et repli** (`api/src/cities/cities.service.ts`)
+`GET /api/cities?q=` interroge `geo.api.gouv.fr`, communes les plus peuplées d'abord, huit résultats
+au plus. Trois protections : un délai maximal de **3 secondes** (`AbortController`), une validation
+stricte de chaque champ de la réponse — nom, code INSEE, code département, codes postaux — une
+réponse mal formée étant traitée comme une panne, et un cache mémoire de 10 minutes limité à
+100 entrées, évincé en LRU. Toute panne devient un seul `503 CITY_LOOKUP_UNAVAILABLE`, sans laisser
+filtrer le message d'origine, et l'interface bascule en saisie manuelle : la ville reste renseignable,
+`cityCode` passe à `null` et `locationVerified` à `false` (R-LOC-3).
+
+**Limitation de débit** (`api/src/common/account-throttler.guard.ts`)
+Par compte quand la requête est authentifiée, par adresse IP sinon (`TRUST_PROXY_HOPS` pour nginx) :
+inscription 10 par heure, connexion 5 par quart d'heure, recherche de communes 30 par tranche de
+10 secondes, envoi de messages 30 par 10 minutes. Dépassement → `429`.
+
 ## Documentation
 
 | Document | Contenu |
@@ -55,6 +118,44 @@ web/     Interface Vue 3 (Vite)
 docs/    Documentation de conception
 docker/  Script d'initialisation PostgreSQL (création de la base de test)
 ```
+
+## Architecture
+
+Trois conteneurs, un seul point d'entrée public. Le navigateur ne parle qu'à nginx, qui sert
+l'interface compilée et relaie `/api/`. L'API est seule à joindre PostgreSQL et seule à sortir vers
+le service de recherche de communes.
+
+```mermaid
+flowchart LR
+    B["Navigateur"]
+    subgraph compose["docker compose"]
+        direction LR
+        W["web — nginx<br/>interface Vue 3 compilée<br/>relaie /api/"]
+        A["api — NestJS 11<br/>gardes, DTO, TypeORM"]
+        D[("db — PostgreSQL 17<br/>9 tables, contraintes CHECK")]
+        W -->|"/api/"| A
+        A -->|"5432"| D
+    end
+    G["geo.api.gouv.fr<br/>recherche de communes"]
+    B -->|"8080"| W
+    A -. "3 s max, repli manuel" .-> G
+```
+
+| Module de l'API | Rôle |
+|---|---|
+| `auth` | Hachage Argon2id, cookie de session, gardes et décorateurs d'autorisation |
+| `profiles` (+ `users`) | Profils, statuts, découverte des membres approuvés |
+| `events` | Sorties, cycle de vie, inscriptions, participants, filtres |
+| `messaging` | Éligibilité, conversations, messages |
+| `moderation` | Files de modération et journal d'audit |
+| `cities` | Recherche de communes et repli manuel |
+| `interests`, `health` | Référentiel des centres d'intérêt, sonde de santé de Compose |
+| `common`, `config` | Format d'erreur commun, validation, limitation de débit, variables d'environnement |
+| `database` | Migrations versionnées et script de données de démonstration |
+
+Les choix techniques, le détail des couches et le **registre des risques** sont dans
+[docs/architecture.md](docs/architecture.md) ; les 9 entités et leurs contraintes dans
+[docs/modele-donnees.md](docs/modele-donnees.md).
 
 ## Prérequis
 
@@ -84,6 +185,36 @@ Ouvrir ensuite <http://localhost:8080> et se connecter avec un
 l'API joue alors les migrations puis se lance. `web` attend que l'API réponde sur `/api/health`.
 Les trois services sont donc liés par `depends_on: condition: service_healthy`, pas par un simple
 ordre de lancement.
+
+## Parcours de démonstration
+
+Ce parcours traverse les quatre rôles et montre les règles à l'œuvre. Tous les comptes fictifs
+utilisent le mot de passe `ReTiredDemo2026!`.
+
+1. **Visiteur** — <http://localhost:8080> : l'accueil liste les centres d'intérêt lus en base. « Vos
+   données et votre vie privée » et les mentions légales sont accessibles sans compte.
+2. **Créer un compte** — « Inscription ». Le profil part en attente de modération (R-PROF-1). Dans
+   « Mon profil », chercher sa ville — la saisie interroge `geo.api.gouv.fr` — et cocher des centres
+   d'intérêt. « Les membres » reste refusé, et l'écran dit pourquoi au lieu d'une page vide.
+3. **Modérateur** — `moderateur@example.test` : « Modération → Profils », file « en attente ». Le
+   profil créé y est ; l'approuver. La décision est écrite dans le journal d'audit.
+4. **Membre approuvé** — se reconnecter avec le compte créé : « Les membres » s'ouvre, filtrable par
+   centre d'intérêt et par département.
+5. **Organisateur** — `organisateur@example.test` : « Mes sorties » liste ses sorties. En créer une,
+   qui naît en brouillon, puis la publier. Elle ne pourra plus revenir en brouillon.
+6. **S'inscrire** — avec `membre1@example.test`, ouvrir une sortie et s'inscrire : **l'adresse exacte
+   n'apparaît qu'à partir de maintenant**. Se désinscrire libère la place aussitôt.
+7. **Messagerie** — toujours avec `membre1@example.test`, ouvrir la fiche de `membre2@example.test` et
+   cliquer « Écrire » : les deux sont inscrits à la même sortie, le contact est donc permis. Depuis le
+   compte créé à l'étape 2, le même bouton répond que la conversation sera possible après une sortie
+   commune (`403 NOT_ELIGIBLE`).
+8. **Annuler** — depuis l'organisateur, annuler la sortie avec un motif de 5 à 300 caractères, que
+   les inscrits verront. L'annulation est définitive : seul un brouillon peut être publié, donc une
+   sortie annulée ne revient pas. Un modérateur peut annuler à la place de l'organisateur, et cette
+   décision-là est journalisée.
+
+Un modérateur n'a accès à aucune conversation, même en connaissant son identifiant : la réponse est
+`404` comme pour n'importe quel tiers (R-MSG-4).
 
 ## Développement hors conteneur
 
@@ -316,3 +447,19 @@ Le public a plus de 60 ans : l'interface vise le niveau AA du RGAA / WCAG.
 - Le journal de modération est rempli mais n'a pas d'écran de consultation.
 - Les en-têtes de sécurité (CSP, etc.) sont posés par l'API (`helmet`) mais pas par le nginx qui sert
   l'interface.
+
+## Équipe et contributions
+
+Trois développeurs, un domaine chacun, de la migration jusqu'à l'écran. Chaque membre doit pouvoir
+expliquer **toute** l'architecture à l'oral, pas seulement sa partie. Le détail des missions est
+dans [docs/equipe-et-perimetre.md](docs/equipe-et-perimetre.md) et
+[docs/backlog.md](docs/backlog.md).
+
+| Membre | Domaine | Ce qui a été livré |
+|---|---|---|
+| **Jason** — [`@ToujoursPareil8`](https://github.com/ToujoursPareil8) | Comptes, profils, modération, sécurité transverse (`api/src/auth`, `profiles`, `users`, `moderation`, `common`) | Hachage Argon2id et sessions par cookie `httpOnly`, gardes et décorateurs d'autorisation réutilisables, routes d'inscription / connexion / `/me`, profil et découverte des membres approuvés, files de modération et journal d'audit, restrictions de statut appliquées à toute l'API, en-têtes de sécurité, limitation de débit et format d'erreur sûr (missions 2 à 6, 11, 23, 24, 27) |
+| **Thomas** — [`@Tomsonne`](https://github.com/Tomsonne) | Sorties, inscriptions, messagerie, API externe, données de démonstration (`api/src/events`, `messaging`, `cities`, `database`) | Cycle de vie des sorties et contrôle de propriété, inscriptions atomiques sous verrou de ligne et désinscription, filtres par centre d'intérêt et par ville, liste des participants et adresse exacte réservée, éligibilité et création des conversations, envoi et historique des messages paginé par curseur, recherche de communes avec repli manuel, seed de démonstration et procédure de réinitialisation, et les tests d'intégration et e2e de ces domaines (missions 7, 12 à 15, 18 à 20, 22, 29, 30) |
+| **Benjamin** — [`@benji3106`](https://github.com/benji3106) | Interface Vue, accessibilité, Docker (`web/`) | Tous les écrans de l'application : inscription et connexion, « Mon profil » et ses quatre états, découverte des membres et fiche publique, liste et détail d'une sortie, gestion pour l'organisateur et formulaire de création, boîte de réception et conversation, back-office de modération, vie privée et mentions légales ; direction artistique, accessibilité AA et éco-conception (missions 8 à 10, 16, 17, 21, 25, 26, 31) |
+
+Les missions transverses — fiche d'équipe, plan de recette et revue de sécurité, vérification depuis
+un clone propre, répétition de la démonstration, livraison finale — sont portées par les trois.
